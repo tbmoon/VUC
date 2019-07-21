@@ -1,6 +1,7 @@
 ~
 *.npy
 *.swp
+*-Copy*.ipynb
 .ipynb_checkpoints
 .DS_Store
 
