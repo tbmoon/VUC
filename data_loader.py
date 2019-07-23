@@ -16,9 +16,9 @@ class YouTubeDataset(data.Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        segment_labels = data['segment_labels']
-        segment_scores = data['segment_scores']
-        segment_start_times = data['segment_start_times']
+        segment_labels = np.array(data['segment_labels'])
+        segment_scores = np.array(data['segment_scores'])
+        segment_start_times = np.array(data['segment_start_times'])
         frame_rgb = data['frame_rgb']
         frame_audio = data['frame_audio']
         
