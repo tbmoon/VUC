@@ -31,6 +31,7 @@ class YouTubeDataset(data.Dataset):
             'segment_labels': segment_labels,
             'segment_scores': segment_scores,
             'segment_start_times': segment_start_times,
+            'frame_length': len(frame_rgb),
             'frame_rgb': padded_frame_rgb,
             'frame_audio': padded_frame_audio}
         return sample
