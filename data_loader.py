@@ -7,7 +7,7 @@ import torch.utils.data as data
 
 class YouTubeDataset(data.Dataset):
 
-    def __init__(self, input_dir, phase, num_seg_frames=5, max_frame_length=301, rgb_feature_size=1024, audio_feature_size=128):
+    def __init__(self, input_dir, phase, num_seg_frames=5, max_frame_length=300, rgb_feature_size=1024, audio_feature_size=128):
         self.input_dir = input_dir + 'npy_formatted_frame/validate/'
         self.df = pd.read_csv(input_dir + phase + '.csv')
         self.num_seg_frames = num_seg_frames
@@ -30,14 +30,18 @@ class YouTubeDataset(data.Dataset):
                    (0 if self.max_frame_length % self.num_seg_frames == 0 else 1))) 
         padded_segment_labels[segment_start_times // self.num_seg_frames] = segment_labels
 
+        '''
+        Remove the last frame if the number of frames is 301.
+        '''
+        frame_length = len(frame_rgb) if len(frame_rgb) <= self.max_frame_length else self.max_frame_length
         padded_frame_rgb = np.array([np.array([0.] * self.rgb_feature_size)] * self.max_frame_length)
-        padded_frame_rgb[:len(frame_rgb)] = frame_rgb
+        padded_frame_rgb[:frame_length] = frame_rgb[:frame_length]
         padded_frame_audio = np.array([np.array([0.] * self.audio_feature_size)] * self.max_frame_length)
-        padded_frame_audio[:len(frame_audio)] = frame_audio
+        padded_frame_audio[:frame_length] = frame_audio[:frame_length]
 
         sample = {
             'segment_labels': padded_segment_labels,
-            'frame_length': len(frame_rgb),
+            'frame_length': frame_length,
             'frame_rgb': padded_frame_rgb,
             'frame_audio': padded_frame_audio}
         return sample
@@ -70,7 +74,8 @@ def get_dataloader(
             dataset=youtube_datasets[phase],
             batch_size=batch_size,
             shuffle=True,
-            num_workers=num_workers)
+            num_workers=num_workers,
+            drop_last=True)
         for phase in ['train', 'valid']}
 
     dataset_sizes = {phase: len(youtube_datasets[phase]) for phase in ['train', 'valid']}
