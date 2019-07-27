@@ -54,12 +54,12 @@ def main(args):
 
             for batch_idx, batch_sample in enumerate(data_loaders[phase]):
                 optimizer.zero_grad()
-                
+
                 frame_length = batch_sample['frame_length']
                 frame_rgb = batch_sample['frame_rgb'].to(device)
                 frame_audio = batch_sample['frame_audio'].to(device) 
                 segment_labels = batch_sample['segment_labels'].to(device)                
-                segment_labels = segment_labels.transpose(0, 1)  # [max_segment_length = 61, batch_size]
+                segment_labels = segment_labels.transpose(0, 1)  # [max_segment_length = 60, batch_size]
                 
                 frame_feature = torch.cat((frame_rgb, frame_audio), 2)  # [batch_size, frame_length, feature_size]
                 frame_feature = frame_feature.transpose(0, 1)           # [frame_legnth, batch_size, feature_size]
@@ -68,10 +68,7 @@ def main(args):
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
-                    num_max_frames = max(frame_length) // args.num_seg_frames \
-                                       + (0 if max(frame_length) % args.num_seg_frames == 0 else 1)
-
-                    for iseg in range(num_max_frames):
+                    for iseg in range(max(frame_length) // args.num_seg_frames):
                         output, (last_hidden, last_cell) = model(
                             frame_feature[args.num_seg_frames*iseg:args.num_seg_frames*(iseg+1)],
                             last_hidden,
@@ -86,9 +83,21 @@ def main(args):
 
                 running_loss += loss.item()
 
-            epoch_loss = running_loss / dataset_sizes[phase]            
+            epoch_loss = running_loss / dataset_sizes[phase]  
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f} \n'.format(phase.upper(), epoch+1, args.num_epochs, epoch_loss))
+            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f} \n'
+                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss))
+
+            # Log the loss in an epoch.
+            with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt')
+                      .format(phase, epoch+1), 'w') as f:
+                f.write(str(epoch+1) + '\t'
+                        + str(epoch_loss))
+
+        # Save the model check points.
+        if (epoch+1) % args.save_step == 0:
+            torch.save({'epoch': epoch+1, 'state_dict': model.state_dict()},
+                       os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
 
 
 if __name__ == '__main__':
@@ -108,9 +117,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_seg_frames', type=int, default=5,
                         help='the number of frames per segment.')
     
-    parser.add_argument('--max_frame_length', type=int, default=301,
+    parser.add_argument('--max_frame_length', type=int, default=300,
                         help='maximum length of frame. \
-                              the length in the VQA dataset = 301')
+                              the length in the VQA dataset = 300.')
     
     parser.add_argument('--rgb_feature_size', type=int, default=1024,
                         help='rgb feature size in a frame.')
@@ -133,19 +142,19 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate for training.')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=5,
                         help='period of learning rate decay.')
 
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay.')
 
-    parser.add_argument('--num_epochs', type=int, default=10,
+    parser.add_argument('--num_epochs', type=int, default=20,
                         help='number of epochs.')
 
-    parser.add_argument('--batch_size', type=int, default=64,
+    parser.add_argument('--batch_size', type=int, default=32,
                         help='batch_size.')
 
-    parser.add_argument('--num_workers', type=int, default=4,
+    parser.add_argument('--num_workers', type=int, default=2,
                         help='number of processes working on cpu.')
 
     parser.add_argument('--save_step', type=int, default=1,
