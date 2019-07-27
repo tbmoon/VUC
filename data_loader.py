@@ -21,7 +21,7 @@ class YouTubeDataset(data.Dataset):
         segment_start_times = np.array(data['segment_start_times'])
         frame_rgb = data['frame_rgb']
         frame_audio = data['frame_audio']
-        
+
         padded_frame_rgb = np.array([np.array([0.] * self.rgb_feature_size)] * self.max_frame_length)
         padded_frame_rgb[:len(frame_rgb)] = frame_rgb
         padded_frame_audio = np.array([np.array([0.] * self.audio_feature_size)] * self.max_frame_length)
