@@ -17,8 +17,9 @@ def main(args):
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
 
-    data_loader = get_dataloader(
+    data_loaders, dataset_sizes = get_dataloader(
         input_dir=args.input_dir,
+        num_seg_frames=args.num_seg_frames,
         max_frame_length=args.max_frame_length,
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
@@ -42,10 +43,7 @@ def main(args):
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
     for epoch in range(args.num_epochs):
-
-        #for phase in ['train', 'valid']:
-        for phase in ['train']: 
-
+        for phase in ['train', 'valid']:
             running_loss = 0.0
 
             if phase == 'train':
@@ -54,61 +52,43 @@ def main(args):
             else:
                 model.eval()
 
-            for batch_idx, batch_sample in enumerate(data_loader[phase]):
+            for batch_idx, batch_sample in enumerate(data_loaders[phase]):
                 optimizer.zero_grad()
                 
                 frame_length = batch_sample['frame_length']
                 frame_rgb = batch_sample['frame_rgb'].to(device)
                 frame_audio = batch_sample['frame_audio'].to(device) 
-                segment_labels = batch_sample['segment_labels']
-                segment_scores = batch_sample['segment_scores']
-                segment_start_times = batch_sample['segment_start_times']
-
+                segment_labels = batch_sample['segment_labels'].to(device)                
+                segment_labels = segment_labels.transpose(0, 1)  # [max_segment_length = 61, batch_size]
+                
                 frame_feature = torch.cat((frame_rgb, frame_audio), 2)  # [batch_size, frame_length, feature_size]
                 frame_feature = frame_feature.transpose(0, 1)           # [frame_legnth, batch_size, feature_size]
                 last_hidden = torch.randn(args.num_layers, args.batch_size, args.hidden_size).to(device)
                 last_cell = torch.randn(args.num_layers, args.batch_size, args.hidden_size).to(device)
-                
+
                 with torch.set_grad_enabled(phase == 'train'):
-                    
-                    for iseg in range(max(frame_length) // args.num_seg_frames):
-                        
+                    loss = 0.0
+                    num_max_frames = max(frame_length) // args.num_seg_frames \
+                                       + (0 if max(frame_length) % args.num_seg_frames == 0 else 1)
+
+                    for iseg in range(num_max_frames):
                         output, (last_hidden, last_cell) = model(
                             frame_feature[args.num_seg_frames*iseg:args.num_seg_frames*(iseg+1)],
                             last_hidden,
-                            last_cell)  # output: [1, batch_size, num_classes = 1001]
-                        
-                        
-                        ###########
-                        '''
-                        라벨에 대해서 전처리하자!!
-                        미니배치 샘플은 각각 다른 라벨 크기를 가지고 있어서 문제가 생김.
-                        따라서, 0으로 패딩 후 각각의 스타트 타임에 라벨을 리스트에 주고 텐서로 변화하자.
-                        '''
-                        #print(output)
-                        #print(output.shape)
+                            last_cell)                # output: [1, batch_size, num_classes = 1001]
+                        output = output.squeeze(0)    # output: [batch_size, num_classes = 1001]
+                        label = segment_labels[iseg]  # label: [batch_size]
+                        loss += criterion(output, label)
 
-
-                        
-                        print(segment_labels)
-                        print(segment_labels.numpy())
-                        print(segment_labels.shape)
-                        print(segment_start_times)
-                        print(segment_start_times.shape)
-                        #loss = criterion(output, segment_labels)
-                        #print(output)
-                        break
-                    
-                    #loss = criterion(output, label)
-                    
                     if phase == 'train':
-                        #loss.backward()
+                        loss.backward()
                         optimizer.step()
 
-                #print(frame_rgb)
-                #print(batch_idx)
-                break
-                    
+                running_loss += loss.item()
+
+            epoch_loss = running_loss / dataset_sizes[phase]            
+
+            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f} \n'.format(phase.upper(), epoch+1, args.num_epochs, epoch_loss))
 
 
 if __name__ == '__main__':
@@ -127,7 +107,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--num_seg_frames', type=int, default=5,
                         help='the number of frames per segment.')
-    
     
     parser.add_argument('--max_frame_length', type=int, default=301,
                         help='maximum length of frame. \
@@ -160,13 +139,13 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay.')
 
-    parser.add_argument('--num_epochs', type=int, default=1,
+    parser.add_argument('--num_epochs', type=int, default=10,
                         help='number of epochs.')
 
-    parser.add_argument('--batch_size', type=int, default=2,
+    parser.add_argument('--batch_size', type=int, default=64,
                         help='batch_size.')
 
-    parser.add_argument('--num_workers', type=int, default=0,
+    parser.add_argument('--num_workers', type=int, default=4,
                         help='number of processes working on cpu.')
 
     parser.add_argument('--save_step', type=int, default=1,
