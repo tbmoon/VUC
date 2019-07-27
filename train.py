@@ -85,7 +85,7 @@ def main(args):
 
             epoch_loss = running_loss / dataset_sizes[phase]  
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f} \n'
+            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}'
                   .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss))
 
             # Log the loss in an epoch.
@@ -98,6 +98,7 @@ def main(args):
         if (epoch+1) % args.save_step == 0:
             torch.save({'epoch': epoch+1, 'state_dict': model.state_dict()},
                        os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
+        print()
 
 
 if __name__ == '__main__':
@@ -127,7 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame.')
 
-    parser.add_argument('--num_layers', type=int, default=1,
+    parser.add_argument('--num_layers', type=int, default=6,
                         help='number of layers of the RNN(LSTM).')
     
     parser.add_argument('--hidden_size', type=int, default=512,
@@ -142,13 +143,13 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate for training.')
 
-    parser.add_argument('--step_size', type=int, default=5,
+    parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay.')
 
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay.')
 
-    parser.add_argument('--num_epochs', type=int, default=20,
+    parser.add_argument('--num_epochs', type=int, default=100,
                         help='number of epochs.')
 
     parser.add_argument('--batch_size', type=int, default=32,
