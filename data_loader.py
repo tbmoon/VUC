@@ -36,7 +36,7 @@ class YouTubeDataset(data.Dataset):
         padded_frame_audio[:len(frame_audio)] = frame_audio
 
         sample = {
-            'segment_labels': segment_labels,
+            'segment_labels': padded_segment_labels,
             'frame_length': len(frame_rgb),
             'frame_rgb': padded_frame_rgb,
             'frame_audio': padded_frame_audio}
