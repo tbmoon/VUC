@@ -22,6 +22,12 @@ class YouTubeDataset(data.Dataset):
         frame_rgb = data['frame_rgb']
         frame_audio = data['frame_audio']
 
+        segment_labels = segment_labels * segment_scores
+        segment_labels = [int(i) for i in segment_labels]
+        padded_segment_labels = np.array(
+            [0] * (self.max_frame_length // 5 + (0 if self.max_frame_length % 5 == 0 else 1))) 
+        padded_segment_labels[segment_start_times // 5] = segment_labels
+
         padded_frame_rgb = np.array([np.array([0.] * self.rgb_feature_size)] * self.max_frame_length)
         padded_frame_rgb[:len(frame_rgb)] = frame_rgb
         padded_frame_audio = np.array([np.array([0.] * self.audio_feature_size)] * self.max_frame_length)
@@ -29,8 +35,6 @@ class YouTubeDataset(data.Dataset):
 
         sample = {
             'segment_labels': segment_labels,
-            'segment_scores': segment_scores,
-            'segment_start_times': segment_start_times,
             'frame_length': len(frame_rgb),
             'frame_rgb': padded_frame_rgb,
             'frame_audio': padded_frame_audio}
@@ -61,7 +65,7 @@ def get_dataloader(
         phase: torch.utils.data.DataLoader(
             dataset=youtube_dataset[phase],
             batch_size=batch_size,
-            shuffle=False,
+            shuffle=True,
             num_workers=num_workers)
         for phase in ['train', 'valid']}
 
