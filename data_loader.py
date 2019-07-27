@@ -55,7 +55,7 @@ def get_dataloader(
     batch_size,
     num_workers):
 
-    youtube_dataset = {
+    youtube_datasets = {
         phase: YouTubeDataset(
             input_dir=input_dir,
             phase=phase,
@@ -65,12 +65,14 @@ def get_dataloader(
             audio_feature_size=audio_feature_size)
         for phase in ['train', 'valid']}
 
-    data_loader = {
+    data_loaders = {
         phase: torch.utils.data.DataLoader(
-            dataset=youtube_dataset[phase],
+            dataset=youtube_datasets[phase],
             batch_size=batch_size,
             shuffle=True,
             num_workers=num_workers)
         for phase in ['train', 'valid']}
 
-    return data_loader
+    dataset_sizes = {phase: len(youtube_datasets[phase]) for phase in ['train', 'valid']}
+
+    return data_loaders, dataset_sizes
