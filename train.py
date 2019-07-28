@@ -129,7 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame.')
 
-    parser.add_argument('--num_layers', type=int, default=6,
+    parser.add_argument('--num_layers', type=int, default=3,
                         help='number of layers of the RNN(LSTM).')
     
     parser.add_argument('--hidden_size', type=int, default=512,
