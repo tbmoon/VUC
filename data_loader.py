@@ -22,9 +22,9 @@ class YouTubeDataset(data.Dataset):
         frame_audio = data['frame_audio']
 
         '''
-        Remove the last frame if the number of frames is 301.
+        Keep multiples of num_seg_frames (=5) of the frames for a video.
         '''
-        frame_length = len(frame_rgb) if len(frame_rgb) <= self.max_frame_length else self.max_frame_length
+        frame_length = len(frame_rgb) - (len(frame_rgb) % self.num_seg_frames)
         padded_frame_rgb = np.array([np.array([0.] * self.rgb_feature_size)] * self.max_frame_length)
         padded_frame_rgb[:frame_length] = frame_rgb[:frame_length]
         padded_frame_audio = np.array([np.array([0.] * self.audio_feature_size)] * self.max_frame_length)
