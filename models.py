@@ -24,6 +24,7 @@ class LstmModel(nn.Module):
           - last_hidden: [1, batch_size, hidden_size]
           - last_ceel:   [1, batch_size, hidden_size]
         '''
+        input_seg = self.tanh(input_seg)
         output, (last_hidden, last_cell) = self.lstm(input_seg.float(), (last_hidden, last_cell))
 
         output = output.transpose(0, 2)  # output: [hidden_size, batch_size, num_seg_frames]
