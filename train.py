@@ -19,6 +19,7 @@ def main(args):
 
     data_loaders, dataset_sizes = get_dataloader(
         input_dir=args.input_dir,
+        phases=['train', 'valid'],
         num_seg_frames=args.num_seg_frames,
         max_frame_length=args.max_frame_length,
         rgb_feature_size=args.rgb_feature_size,
