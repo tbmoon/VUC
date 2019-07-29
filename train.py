@@ -76,7 +76,8 @@ def main(args):
                             last_cell)                # output: [1, batch_size, num_classes = 1001]
                         output = output.squeeze(0)    # output: [batch_size, num_classes = 1001]
                         label = segment_labels[iseg]  # label: [batch_size]
-                        loss += criterion(output, label)
+                        if label.byte().any(dim=0).cpu().numpy() == 1:
+                            loss += criterion(output, label)
 
                     if phase == 'train':
                         loss.backward()
