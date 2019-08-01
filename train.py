@@ -76,7 +76,7 @@ def main(args):
 
                     _, pred = torch.max(output, 1)
                     loss = criterion(output, label)
-                    
+
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_classes', type=int, default=1001,
                         help='the number of classes.')
 
-    parser.add_argument('--learning_rate', type=float, default=0.0001,
+    parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training.')
 
     parser.add_argument('--step_size', type=int, default=10,
