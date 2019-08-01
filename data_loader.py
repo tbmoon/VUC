@@ -37,6 +37,7 @@ class YouTubeDataset(data.Dataset):
 
         if self.load_labels == True:
             video_labels = np.array(data['video_labels'])
+            video_labels = np.random.choice(video_labels) if len(video_labels) != 0 else 0
             segment_labels = np.array(data['segment_labels'])
             segment_scores = np.array(data['segment_scores'])
             segment_start_times = np.array(data['segment_start_times'])

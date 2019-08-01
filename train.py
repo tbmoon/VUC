@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
-from models import LstmModel
+from models import LstmModel, GlobalGruModel
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -27,7 +27,7 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers)
 
-    model = LstmModel(
+    model = GlobalGruModel(
         num_seg_frames=args.num_seg_frames,
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
@@ -61,27 +61,20 @@ def main(args):
 
                 frame_length = batch_sample['frame_length']
                 frame_rgb = batch_sample['frame_rgb'].to(device)
-                frame_audio = batch_sample['frame_audio'].to(device) 
+                frame_audio = batch_sample['frame_audio'].to(device)
+                video_labels = batch_sample['video_labels'].to(device)
                 segment_labels = batch_sample['segment_labels'].to(device)                
                 segment_labels = segment_labels.transpose(0, 1)  # [max_segment_length = 60, batch_size]
                 
                 frame_feature = torch.cat((frame_rgb, frame_audio), 2)  # [batch_size, frame_length, feature_size]
                 frame_feature = frame_feature.transpose(0, 1)           # [frame_legnth, batch_size, feature_size]
-                last_hidden = torch.zeros(args.num_layers, args.batch_size, args.hidden_size).to(device)
-                last_cell = torch.zeros(args.num_layers, args.batch_size, args.hidden_size).to(device)
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
-                    for iseg in range(max(frame_length) // args.num_seg_frames):
-                        output, (last_hidden, last_cell) = model(
-                            frame_feature[args.num_seg_frames*iseg:args.num_seg_frames*(iseg+1)],
-                            last_hidden,
-                            last_cell)                # output: [1, batch_size, num_classes = 1001]
-                        output = output.squeeze(0)    # output: [batch_size, num_classes = 1001]
-                        label = segment_labels[iseg]  # label: [batch_size]                        
-                        if label.byte().any(dim=0).cpu().numpy() == 1:
-                            loss += criterion(output, label)
-
+                    output = model(frame_feature)  # output: [batch_size, num_classes = 1001]
+                    label = video_labels           # label: [batch_size]
+                    loss = criterion(output, label)
+                    
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
@@ -133,7 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame.')
 
-    parser.add_argument('--num_layers', type=int, default=3,
+    parser.add_argument('--num_layers', type=int, default=1,
                         help='number of layers of the RNN(LSTM).')
     
     parser.add_argument('--hidden_size', type=int, default=512,
@@ -154,7 +147,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay.')
 
-    parser.add_argument('--num_epochs', type=int, default=100,
+    parser.add_argument('--num_epochs', type=int, default=40,
                         help='number of epochs.')
 
     parser.add_argument('--batch_size', type=int, default=32,
