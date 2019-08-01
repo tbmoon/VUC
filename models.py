@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pack_padded_sequence
 
 
 class LstmModel(nn.Module):
@@ -47,7 +48,7 @@ class GlobalGruModel(nn.Module):
         self.fc1 = nn.Linear(num_layers * hidden_size, fc_size)
         self.fc2 = nn.Linear(fc_size, num_classes)
 
-    def forward(self, input_seg):
+    def forward(self, input_seg, input_seg_len):
         '''
         output = self.gru(input)
           input:
@@ -55,7 +56,8 @@ class GlobalGruModel(nn.Module):
           output:
           - hidden: [num_layers, batch_size, hidden_size]
         '''
-        _, hidden = self.gru(input_seg.float())
+        packed = pack_padded_sequence(input_seg.float(), input_seg_len, enforce_sorted=False) 
+        _, hidden = self.gru(packed)
 
         hidden = hidden.transpose(0, 1)                # hidden: [batch_size, num_layers, hidden_size]
         output = self.tanh(hidden)                     # output: [batch_size, num_layers, hidden_size]
