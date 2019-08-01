@@ -126,7 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame.')
 
-    parser.add_argument('--num_layers', type=int, default=1,
+    parser.add_argument('--num_layers', type=int, default=3,
                         help='number of layers of the RNN(LSTM).')
     
     parser.add_argument('--hidden_size', type=int, default=512,
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_classes', type=int, default=1001,
                         help='the number of classes.')
 
-    parser.add_argument('--learning_rate', type=float, default=0.001,
+    parser.add_argument('--learning_rate', type=float, default=0.0001,
                         help='learning rate for training.')
 
     parser.add_argument('--step_size', type=int, default=10,
@@ -150,10 +150,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=40,
                         help='number of epochs.')
 
-    parser.add_argument('--batch_size', type=int, default=32,
+    parser.add_argument('--batch_size', type=int, default=128,
                         help='batch_size.')
 
-    parser.add_argument('--num_workers', type=int, default=2,
+    parser.add_argument('--num_workers', type=int, default=8,
                         help='number of processes working on cpu.')
 
     parser.add_argument('--save_step', type=int, default=1,
