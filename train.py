@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.nn.utils.rnn import pack_padded_sequence
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import LstmModel, GlobalGruModel
@@ -72,6 +73,8 @@ def main(args):
                     loss = 0.0
                     output = model(frame_feature, frame_length)  # output: [batch_size, num_classes = 1001]
                     label = video_labels           # label: [batch_size]
+
+                    _, pred = torch.max(output, 1)
                     loss = criterion(output, label)
                     
                     if phase == 'train':
