@@ -44,7 +44,7 @@ class GlobalGruModel(nn.Module):
         super(GlobalGruModel, self).__init__()
         self.gru = nn.GRU(rgb_feature_size + audio_feature_size, hidden_size, num_layers)
         self.tanh = nn.Tanh()
-        self.fc1 = nn.Linear(hidden_size, fc_size)
+        self.fc1 = nn.Linear(num_layers * hidden_size, fc_size)
         self.fc2 = nn.Linear(fc_size, num_classes)
 
     def forward(self, input_seg):
