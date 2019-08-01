@@ -36,6 +36,7 @@ class YouTubeDataset(data.Dataset):
             'frame_audio': padded_frame_audio}
 
         if self.load_labels == True:
+            video_labels = np.array(data['video_labels'])
             segment_labels = np.array(data['segment_labels'])
             segment_scores = np.array(data['segment_scores'])
             segment_start_times = np.array(data['segment_start_times'])
@@ -47,6 +48,7 @@ class YouTubeDataset(data.Dataset):
                    (0 if self.max_frame_length % self.num_seg_frames == 0 else 1)))
             padded_segment_labels[segment_start_times // self.num_seg_frames] = segment_labels
 
+            sample['video_labels'] = video_labels
             sample['segment_labels'] = padded_segment_labels
 
         return sample
