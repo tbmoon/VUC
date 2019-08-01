@@ -36,6 +36,9 @@ def main(args):
         fc_size=args.fc_size,
         num_classes=args.num_classes).to(device)
 
+    #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
+    #model.load_state_dict(checkpoint['state_dict'])
+    
     criterion = nn.CrossEntropyLoss()
 
     params = model.parameters()
@@ -64,8 +67,8 @@ def main(args):
                 
                 frame_feature = torch.cat((frame_rgb, frame_audio), 2)  # [batch_size, frame_length, feature_size]
                 frame_feature = frame_feature.transpose(0, 1)           # [frame_legnth, batch_size, feature_size]
-                last_hidden = torch.randn(args.num_layers, args.batch_size, args.hidden_size).to(device)
-                last_cell = torch.randn(args.num_layers, args.batch_size, args.hidden_size).to(device)
+                last_hidden = torch.zeros(args.num_layers, args.batch_size, args.hidden_size).to(device)
+                last_cell = torch.zeros(args.num_layers, args.batch_size, args.hidden_size).to(device)
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
@@ -75,7 +78,7 @@ def main(args):
                             last_hidden,
                             last_cell)                # output: [1, batch_size, num_classes = 1001]
                         output = output.squeeze(0)    # output: [batch_size, num_classes = 1001]
-                        label = segment_labels[iseg]  # label: [batch_size]
+                        label = segment_labels[iseg]  # label: [batch_size]                        
                         if label.byte().any(dim=0).cpu().numpy() == 1:
                             loss += criterion(output, label)
 
