@@ -59,19 +59,18 @@ def main(args):
             for batch_idx, batch_sample in enumerate(data_loaders[phase]):
                 optimizer.zero_grad()
 
-                frame_length = batch_sample['frame_length']
+                frame_length = batch_sample['frame_length'].to(device)
                 frame_rgb = batch_sample['frame_rgb'].to(device)
                 frame_audio = batch_sample['frame_audio'].to(device)
                 video_labels = batch_sample['video_labels'].to(device)
-                segment_labels = batch_sample['segment_labels'].to(device)                
-                segment_labels = segment_labels.transpose(0, 1)  # [max_segment_length = 60, batch_size]
-                
+                segment_labels = batch_sample['segment_labels'].to(device)
+                segment_labels = segment_labels.transpose(0, 1)         # [max_segment_length = 60, batch_size]
                 frame_feature = torch.cat((frame_rgb, frame_audio), 2)  # [batch_size, frame_length, feature_size]
                 frame_feature = frame_feature.transpose(0, 1)           # [frame_legnth, batch_size, feature_size]
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
-                    output = model(frame_feature)  # output: [batch_size, num_classes = 1001]
+                    output = model(frame_feature, frame_length)  # output: [batch_size, num_classes = 1001]
                     label = video_labels           # label: [batch_size]
                     loss = criterion(output, label)
                     
