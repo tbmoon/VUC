@@ -48,8 +48,9 @@ def main(args):
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
     for epoch in range(args.num_epochs):
-        for phase in ['train', 'valid']:
+        for phase in ['train']:
             running_loss = 0.0
+            running_corrects = 0
 
             if phase == 'train':
                 scheduler.step()
@@ -57,42 +58,42 @@ def main(args):
             else:
                 model.eval()
 
-            for batch_idx, batch_sample in enumerate(data_loaders[phase]):
+            for idx, (padded_frame_rgbs, padded_frame_audios, frame_lengths, video_labels) in enumerate(data_loaders[phase]):
                 optimizer.zero_grad()
 
-                frame_length = batch_sample['frame_length'].to(device)
-                frame_rgb = batch_sample['frame_rgb'].to(device)
-                frame_audio = batch_sample['frame_audio'].to(device)
-                video_labels = batch_sample['video_labels'].to(device)
-                segment_labels = batch_sample['segment_labels'].to(device)
-                segment_labels = segment_labels.transpose(0, 1)         # [max_segment_length = 60, batch_size]
-                frame_feature = torch.cat((frame_rgb, frame_audio), 2)  # [batch_size, frame_length, feature_size]
-                frame_feature = frame_feature.transpose(0, 1)           # [frame_legnth, batch_size, feature_size]
+                padded_frame_rgbs = padded_frame_rgbs.to(device)
+                padded_frame_audios = padded_frame_audios.to(device)
+                frame_lengths = frame_lengths
+                video_labels = video_labels.to(device)
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
-                    output = model(frame_feature, frame_length)  # output: [batch_size, num_classes = 1001]
-                    label = video_labels           # label: [batch_size]
+                    
+                    # outputs: [batch_size, num_classes = 1001]
+                    outputs = model(padded_frame_rgbs, padded_frame_audios, frame_lengths)
 
-                    _, pred = torch.max(output, 1)
-                    loss = criterion(output, label)
+                    _, preds = torch.max(outputs, 1)
+                    loss = criterion(outputs, video_labels)
 
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
 
-                running_loss += loss.item()
+                running_loss += loss.item() * padded_frame_rgbs.size(0)
+                running_corrects += torch.sum(preds == video_labels.data)
 
-            epoch_loss = running_loss / dataset_sizes[phase]  
+            epoch_loss = running_loss / dataset_sizes[phase]
+            epoch_acc = running_corrects.double() / dataset_sizes[phase]
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}'
-                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss))
+            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Acc: {:.4f}'
+                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_acc))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt')
                       .format(phase, epoch+1), 'w') as f:
                 f.write(str(epoch+1) + '\t'
-                        + str(epoch_loss))
+                        + str(epoch_loss) + '\t'
+                        + str(epoch_acc))
 
         # Save the model check points.
         if (epoch+1) % args.save_step == 0:
@@ -128,7 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame.')
 
-    parser.add_argument('--num_layers', type=int, default=3,
+    parser.add_argument('--num_layers', type=int, default=1,
                         help='number of layers of the RNN(LSTM).')
     
     parser.add_argument('--hidden_size', type=int, default=512,
@@ -143,16 +144,16 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training.')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=20,
                         help='period of learning rate decay.')
 
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay.')
 
-    parser.add_argument('--num_epochs', type=int, default=40,
+    parser.add_argument('--num_epochs', type=int, default=100,
                         help='number of epochs.')
 
-    parser.add_argument('--batch_size', type=int, default=128,
+    parser.add_argument('--batch_size', type=int, default=256,
                         help='batch_size.')
 
     parser.add_argument('--num_workers', type=int, default=8,

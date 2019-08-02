@@ -48,22 +48,29 @@ class GlobalGruModel(nn.Module):
         self.fc1 = nn.Linear(num_layers * hidden_size, fc_size)
         self.fc2 = nn.Linear(fc_size, num_classes)
 
-    def forward(self, input_seg, input_seg_len):
+    def forward(self, padded_frame_rgbs, padded_frame_audios, frame_lengths):
         '''
-        output = self.gru(input)
-          input:
-          - input_seg: [num_frames, batch_size, feature_size]
-          output:
+        outputs = self.gru(inputs)
+          inputs:
+          - padded_frame_rgbs: [frame_lengths, batch_size, feature_size]
+          - padded_frame_audios: [frame_lengths, batch_size, feature_size]
+          outputs:
           - hidden: [num_layers, batch_size, hidden_size]
         '''
-        packed = pack_padded_sequence(input_seg.float(), input_seg_len, enforce_sorted=False) 
-        _, hidden = self.gru(packed)
+        padded_frame_rgbs = padded_frame_rgbs / 255.
+        padded_frame_audios = padded_frame_audios / 255.
+        
+        padded_frames = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
+        
+        padded_frames = padded_frames.transpose(0, 1).float()  # padded_frames: [frame_lengths, batch_size, feature_size]
+        packed = pack_padded_sequence(padded_frames, frame_lengths)
+        _, hidden = self.gru(packed)                           # hidden: [num_layers, batch_size, hidden_size]
+        hidden = hidden.transpose(0, 1)                        # hidden: [batch_size, num_layers, hidden_size]
 
-        hidden = hidden.transpose(0, 1)                # hidden: [batch_size, num_layers, hidden_size]
-        output = self.tanh(hidden)                     # output: [batch_size, num_layers, hidden_size]
-        output = output.reshape(output.size()[0], -1)  # output: [batch_size, num_layers * hidden_size]
-        output = self.fc1(output)                      # output: [batch_size, fc_size]
-        output = self.tanh(output)
-        output = self.fc2(output)                      # output: [batch_size, num_classes]
+        outputs = self.tanh(hidden)                            # outputs: [batch_size, num_layers, hidden_size]
+        outputs = outputs.reshape(outputs.size()[0], -1)       # outputs: [batch_size, num_layers * hidden_size]
+        outputs = self.fc1(outputs)                            # outputs: [batch_size, fc_size]
+        outputs = self.tanh(outputs)
+        outputs = self.fc2(outputs)                            # outputs: [batch_size, num_classes]
 
-        return output
+        return outputs

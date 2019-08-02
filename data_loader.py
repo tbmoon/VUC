@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import pandas as pd
 import torch
@@ -18,46 +19,69 @@ class YouTubeDataset(data.Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        frame_rgb = data['frame_rgb']
-        frame_audio = data['frame_audio']
-
-        '''
-        Keep multiples of num_seg_frames (=5) of the frames for a video.
-        '''
-        frame_length = len(frame_rgb) - (len(frame_rgb) % self.num_seg_frames)
-        padded_frame_rgb = np.array([np.array([0.] * self.rgb_feature_size)] * self.max_frame_length)
-        padded_frame_rgb[:frame_length] = frame_rgb[:frame_length]
-        padded_frame_audio = np.array([np.array([0.] * self.audio_feature_size)] * self.max_frame_length)
-        padded_frame_audio[:frame_length] = frame_audio[:frame_length]
-
-        sample = {
-            'frame_length': frame_length,
-            'frame_rgb': padded_frame_rgb,
-            'frame_audio': padded_frame_audio}
+        frame_rgb = torch.Tensor(data['frame_rgb'])
+        frame_audio = torch.Tensor(data['frame_audio'])
 
         if self.load_labels == True:
-            segment_labels = np.array(data['segment_labels'])
-            segment_scores = np.array(data['segment_scores'])
-            segment_start_times = np.array(data['segment_start_times'])
-
-            segment_labels = segment_labels * segment_scores
-            segment_labels = [int(i) for i in segment_labels]
-
-            video_labels = np.array(data['video_labels'])
-            video_labels = np.random.choice(video_labels) if len(video_labels) != 0 else np.random.randint(1001)
-
-            padded_segment_labels = np.array(
-                [0] * (self.max_frame_length // self.num_seg_frames + 
-                   (0 if self.max_frame_length % self.num_seg_frames == 0 else 1)))
-            padded_segment_labels[segment_start_times // self.num_seg_frames] = segment_labels
-
-            sample['video_labels'] = video_labels
-            sample['segment_labels'] = padded_segment_labels
-
-        return sample
+            video_label = np.array(data['video_labels'])
+            video_label = random.choice(video_label)
+            video_label = torch.tensor(video_label)
+            
+        return (frame_rgb, frame_audio, video_label)
 
     def __len__(self):
         return len(self.df)
+
+
+def collate_fn(data):
+    """
+    Create mini-batch tensors from the list of tuples (frame_rgb, frame_audio, video_label).
+
+    We should build custom collate_fn rather than using default collate_fn,
+    because merging frame_rgb and frame_audio (including padding) is not supported in default.
+
+    Args:
+    data: list of tuple (frame_rgb, frame_audio, video_label).
+        - frame_rgb: torch tensor of shape (variable_length, rgb_feature_size=1024).
+        - frame_audio: torch tensor of shape (variable_length, audio_feature_size=128).
+        - video_label: torch tensor of shape (1).
+
+    Returns:
+        - padded_frame_rgbs: torch tensor of shape (batch_size, padded_length, rgb_feature_size=1024).
+        - padded_frame_audios: torch tensor of shape (batch_size, padded_length, audio_feature_size=128).
+        - video_labels: torch tensor of shape (batch_size, 1) 
+        - list; valid length for each padded caption.
+    """
+    
+    # Sort a data list by caption length (descending order).
+    data.sort(key=lambda x: len(x[0]), reverse=True)
+
+    # frame_rgbs: tuple of frame_rgb
+    # frame_audios: tuple of frame_audio
+    # video_labels: tuple of video_label
+    frame_rgbs, frame_audios, video_labels = zip(*data)
+
+    batch_size = len(frame_rgbs)
+    frame_lengths = [len(frame_rgb) for frame_rgb in frame_rgbs]
+    max_frame_len = max(frame_lengths)
+    rgb_feature_size = frame_rgbs[0].size()[1]
+    audio_feature_size = frame_audios[0].size()[1]
+
+    padded_frame_rgbs = torch.zeros(batch_size, max_frame_len, rgb_feature_size)
+    padded_frame_audios = torch.zeros(batch_size, max_frame_len, audio_feature_size)
+
+    # Merge frame_rgbs and frame_audio in a mini-batch
+    for i, frame_rgb in enumerate(frame_rgbs):
+        end = frame_lengths[i]
+        padded_frame_rgbs[i, :end] = frame_rgb
+
+    for i, frame_audio in enumerate(frame_audios):
+        end = frame_lengths[i]
+        padded_frame_audios[i, :end] = frame_audio
+
+    video_labels = torch.stack(video_labels, 0)
+
+    return padded_frame_rgbs, padded_frame_audios, frame_lengths, video_labels
 
 
 def get_dataloader(
@@ -86,7 +110,8 @@ def get_dataloader(
             batch_size=batch_size,
             shuffle=True if phase is not 'test' else False,
             num_workers=num_workers,
-            drop_last=True if phase is not 'test' else False)
+            drop_last=True if phase is not 'test' else False,
+            collate_fn=collate_fn)
         for phase in phases}
 
     dataset_sizes = {phase: len(youtube_datasets[phase]) for phase in phases}
