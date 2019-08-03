@@ -19,8 +19,8 @@ class YouTubeDataset(data.Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        frame_rgb = torch.Tensor(data['frame_rgb'])
-        frame_audio = torch.Tensor(data['frame_audio'])
+        frame_rgb = torch.Tensor(data['frame_rgb'][:-1])
+        frame_audio = torch.Tensor(data['frame_audio'][:-1])
 
         if self.load_labels == True:
             video_label = np.array(data['video_labels'])
@@ -63,9 +63,10 @@ def collate_fn(data):
 
     batch_size = len(frame_rgbs)
     frame_lengths = [len(frame_rgb) for frame_rgb in frame_rgbs]
-    max_frame_len = max(frame_lengths)
-    rgb_feature_size = frame_rgbs[0].size()[1]
-    audio_feature_size = frame_audios[0].size()[1]
+    #max_frame_len = max(frame_lengths)
+    max_frame_len = 300
+    rgb_feature_size = frame_rgbs[0].size(1)
+    audio_feature_size = frame_audios[0].size(1)
 
     padded_frame_rgbs = torch.zeros(batch_size, max_frame_len, rgb_feature_size)
     padded_frame_audios = torch.zeros(batch_size, max_frame_len, audio_feature_size)
@@ -81,7 +82,7 @@ def collate_fn(data):
 
     video_labels = torch.stack(video_labels, 0)
 
-    return padded_frame_rgbs, padded_frame_audios, frame_lengths, video_labels
+    return padded_frame_rgbs, padded_frame_audios, video_labels
 
 
 def get_dataloader(

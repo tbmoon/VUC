@@ -46,35 +46,38 @@ class GlobalGruModel(nn.Module):
         self.embed = nn.Linear(rgb_feature_size + audio_feature_size, embed_size)
         self.gru = nn.GRU(embed_size, hidden_size, num_layers)
         self.tanh = nn.Tanh()
-        self.fc1 = nn.Linear(num_layers * hidden_size, fc_size)
+        self.maxpool1d = nn.MaxPool1d(300, stride=1)
+        self.fc1 = nn.Linear(hidden_size, fc_size)
         self.fc2 = nn.Linear(fc_size, num_classes)
 
-    def forward(self, padded_frame_rgbs, padded_frame_audios, frame_lengths, hidden):
+    def forward(self, padded_frame_rgbs, padded_frame_audios):
         '''
         outputs = self.gru(inputs)
           inputs:
-          - padded_frame_rgbs: [batch_size, feature_size]
-          - padded_frame_audios: [batch_size, feature_size]
-          - frame_lengths: [frame_lengths]
-          - hidden: [num_layers, batch_size, hidden_size]
+          - padded_frame_rgbs: [batch_size, frame_length, rgb_feature_size]
+          - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
           outputs:
           - hidden: [num_layers, batch_size, hidden_size]
         '''
+        # padded_frames: [batch_size, frame_length, feature_size]
         padded_frame_rgbs = padded_frame_rgbs / 255.
         padded_frame_audios = padded_frame_audios / 255.
-        padded_frames = torch.cat((padded_frame_rgbs, padded_frame_audios), 1)  # padded_frames: [batch_size, feature_size]
-        
-        embedded = self.embed(padded_frames)                                    # embedded: [batch_size, embed_size]
-        embedded = self.tanh(embedded)
-        embedded = embedded.unsqueeze(0).float()                                # embedded: [1, batch_size, feature_size]
-                
-        _, hidden = self.gru(embedded, hidden)                 # hidden: [num_layers, batch_size, hidden_size]
+        padded_frames = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)  
 
-        outputs = hidden.transpose(0, 1)                       # outputs: [batch_size, num_layers, hidden_size]
+        embedded = self.embed(padded_frames)                   # embedded: [batch_size, frame_length, embed_size]
+        embedded = self.tanh(embedded)
+        embedded = embedded.transpose(0, 1).float()            # embedded: [frame_length, batch_size, feature_size]
+
+        outputs, _ = self.gru(embedded)                        # outputs: [frame_length, batch_size, hidden_size]
+
+        outputs = outputs.transpose(0, 2)                      # outputs: [hidden_size, batch_size, frame_length]
+        outputs = self.maxpool1d(outputs)
+        outputs = outputs.transpose(0, 2)                      # outputs: [1, batch_size, hidden_size]
+        outputs = outputs.squeeze(0)                           # outputs: [batch_size, hidden_size]
         outputs = self.tanh(outputs)
-        outputs = outputs.reshape(outputs.size()[0], -1)       # outputs: [batch_size, num_layers * hidden_size]
+
         outputs = self.fc1(outputs)                            # outputs: [batch_size, fc_size]
         outputs = self.tanh(outputs)
         outputs = self.fc2(outputs)                            # outputs: [batch_size, num_classes]
 
-        return outputs, hidden
+        return outputs

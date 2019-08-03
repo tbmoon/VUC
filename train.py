@@ -59,26 +59,19 @@ def main(args):
             else:
                 model.eval()
 
-            for idx, (padded_frame_rgbs, padded_frame_audios, frame_lengths, video_labels) in enumerate(data_loaders[phase]):
+            for idx, (padded_frame_rgbs, padded_frame_audios, video_labels) in enumerate(data_loaders[phase]):
                 optimizer.zero_grad()
 
-                # padded_frame_rgbs: [batch_size, frame_lengths, rgb_feature_size]
+                # padded_frame_rgbs: [batch_size, 300, rgb_feature_size]
                 padded_frame_rgbs = padded_frame_rgbs.to(device)
                 padded_frame_audios = padded_frame_audios.to(device)
-                frame_lengths = frame_lengths
                 video_labels = video_labels.to(device)
-                hidden = torch.zeros(args.num_layers, args.batch_size, args.hidden_size).to(device)
-                
-                # padded_frame_rgbs: [frame_lengths, batch_size, rgb_feature_size]
-                padded_frame_rgbs = padded_frame_rgbs.transpose(0, 1)
-                padded_frame_audios = padded_frame_audios.transpose(0, 1)
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
                     
                     # outputs: [batch_size, num_classes = 1001]
-                    for iframe in range(max(frame_lengths)):
-                        outputs, hidden = model(padded_frame_rgbs[iframe], padded_frame_audios[iframe], frame_lengths, hidden)
+                    outputs = model(padded_frame_rgbs, padded_frame_audios)
 
                     _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, video_labels)
@@ -140,7 +133,7 @@ if __name__ == '__main__':
     parser.add_argument('--embed_size', type=int, default=128,
                         help='embedding size.')
 
-    parser.add_argument('--num_layers', type=int, default=3,
+    parser.add_argument('--num_layers', type=int, default=4,
                         help='number of layers of the RNN(LSTM).')
     
     parser.add_argument('--hidden_size', type=int, default=512,
@@ -152,7 +145,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_classes', type=int, default=1001,
                         help='the number of classes.')
 
-    parser.add_argument('--learning_rate', type=float, default=0.001,
+    parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training.')
 
     parser.add_argument('--step_size', type=int, default=20,
@@ -167,7 +160,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=256,
                         help='batch_size.')
 
-    parser.add_argument('--num_workers', type=int, default=8,
+    parser.add_argument('--num_workers', type=int, default=4,
                         help='number of processes working on cpu.')
 
     parser.add_argument('--save_step', type=int, default=1,
