@@ -64,7 +64,7 @@ def main(args):
                     dataset['segment_scores'] = list(data_record[5].values)
                     dataset['frame_rgb'] = list(data_record[6])
                     dataset['frame_audio'] = list(data_record[7])
-                    np.save(out_dir + dataset['video_id'] + '.npy', np.array(dataset))
+                    np.save(output_dir + dataset['video_id'] + '.npy', np.array(dataset))
             except:
                 pass
 
