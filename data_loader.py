@@ -8,10 +8,9 @@ import torch.utils.data as data
 
 class YouTubeDataset(data.Dataset):
 
-    def __init__(self, input_dir, phase, num_seg_frames=5, max_frame_length=300, rgb_feature_size=1024, audio_feature_size=128):
+    def __init__(self, input_dir, phase, max_frame_length=301, rgb_feature_size=1024, audio_feature_size=128):
         self.input_dir = input_dir + 'npy_formatted_frame/{}/'.format('validate' if phase is not 'test' else 'test')
         self.df = pd.read_csv(input_dir + phase + '.csv')
-        self.num_seg_frames = num_seg_frames
         self.max_frame_length = max_frame_length
         self.rgb_feature_size = rgb_feature_size
         self.audio_feature_size = audio_feature_size
@@ -19,8 +18,8 @@ class YouTubeDataset(data.Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        frame_rgb = torch.Tensor(data['frame_rgb'][:-1])
-        frame_audio = torch.Tensor(data['frame_audio'][:-1])
+        frame_rgb = torch.Tensor(data['frame_rgb'])
+        frame_audio = torch.Tensor(data['frame_audio'])
 
         if self.load_labels == True:
             video_label = np.array(data['video_labels'])
@@ -50,21 +49,19 @@ def collate_fn(data):
         - padded_frame_rgbs: torch tensor of shape (batch_size, padded_length, rgb_feature_size=1024).
         - padded_frame_audios: torch tensor of shape (batch_size, padded_length, audio_feature_size=128).
         - video_labels: torch tensor of shape (batch_size, 1) 
-        - list; valid length for each padded caption.
     """
     
     # Sort a data list by caption length (descending order).
     data.sort(key=lambda x: len(x[0]), reverse=True)
 
-    # frame_rgbs: tuple of frame_rgb
+    # frame_rgbs:   tuple of frame_rgb
     # frame_audios: tuple of frame_audio
     # video_labels: tuple of video_label
     frame_rgbs, frame_audios, video_labels = zip(*data)
 
     batch_size = len(frame_rgbs)
     frame_lengths = [len(frame_rgb) for frame_rgb in frame_rgbs]
-    #max_frame_len = max(frame_lengths)
-    max_frame_len = 300
+    max_frame_len = 301
     rgb_feature_size = frame_rgbs[0].size(1)
     audio_feature_size = frame_audios[0].size(1)
 
@@ -88,7 +85,6 @@ def collate_fn(data):
 def get_dataloader(
     input_dir,
     phases,
-    num_seg_frames,
     max_frame_length,
     rgb_feature_size,
     audio_feature_size,
@@ -99,7 +95,6 @@ def get_dataloader(
         phase: YouTubeDataset(
             input_dir=input_dir,
             phase=phase,
-            num_seg_frames=num_seg_frames,
             max_frame_length=max_frame_length,
             rgb_feature_size=rgb_feature_size,
             audio_feature_size=audio_feature_size)
@@ -111,7 +106,6 @@ def get_dataloader(
             batch_size=batch_size,
             shuffle=True if phase is not 'test' else False,
             num_workers=num_workers,
-            drop_last=True if phase is not 'test' else False,
             collate_fn=collate_fn)
         for phase in phases}
 
