@@ -14,10 +14,10 @@
 ### File kyes:
 - 2nd challenge:
   * train/validate:
-   1) id
-   2) rgb
-   3) audio
-   4) labels
+    1) id
+    2) rgb
+    3) audio
+    4) labels
 - 3rd challenge:
   * train/validate:
    1) id
