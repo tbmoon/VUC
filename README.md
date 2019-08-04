@@ -8,8 +8,8 @@
 ### The number of videos
 * 2nd challenge:
 * 3rd challenge:
- - validate: 47,087
- - test: 44,753
+ + validate: 47,087
+ + test: 44,753
 
 ### File kyes:
 * 2nd challenge:
