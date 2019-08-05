@@ -40,7 +40,13 @@ def main(args):
 
     os.makedirs(output_dir, exist_ok=True)
     file_paths = glob.glob(input_dir + '{}*.tfrecord'.format(args.data_type))
-    
+
+    if args.convert_labels == True:
+        df_vocab = pd.read_csv(base_dir + 'vocabulary.csv')
+        vocab_label2idx_dict = dict()
+        for i, label in enumerate(df_vocab['Index']):
+            vocab_label2idx_dict[label] = i+1
+
     with tf.compat.v1.Session() as sess:
         for ifile in range(args.start, args.end):
             assert(ifile < len(file_paths))
@@ -57,13 +63,29 @@ def main(args):
                     data_record = sess.run(next_element)
                     dataset = dict()
                     dataset['video_id'] = data_record[0].decode()
-                    dataset['video_labels'] = list(data_record[1].values)
                     dataset['segment_start_times'] = list(data_record[2].values)
                     dataset['segment_end_times'] = list(data_record[3].values)
                     dataset['segment_labels'] = list(data_record[4].values)
                     dataset['segment_scores'] = list(data_record[5].values)
                     dataset['frame_rgb'] = list(data_record[6])
                     dataset['frame_audio'] = list(data_record[7])
+                    
+                    if args.convert_labels == True:
+                        dataset['video_labels'] = list()
+                        video_labels_list = list(data_record[1].values)
+                        for i, segment_label in enumerate(dataset['segment_labels']):
+                            dataset['segment_labels'][i] = vocab_label2idx_dict[segment_label] 
+                        for i, video_label in enumerate(video_labels_list):
+                            if video_label in vocab_label2idx_dict:
+                                video_idx = vocab_label2idx_dict[video_label]
+                                if challenge == '2nd_challenge':
+                                    dataset['video_labels'].append(video_idx)
+                                else:
+                                    if video_idx in dataset['segment_labels']:
+                                        dataset['video_labels'].append(video_idx)
+                    else:
+                        dataset['video_labels'] = list(data_record[1].values)
+
                     np.save(output_dir + dataset['video_id'] + '.npy', np.array(dataset))
             except:
                 pass
@@ -86,6 +108,9 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='should be selected from "2nd_challenge", "3rd_challenge".')
 
+    parser.add_argument('--convert_labels', type=bool, default=True,
+                        help='convert labels for 3rd challenge ranged from 0 to 1000.')
+    
     parser.add_argument('--start', type=int, default=0,
                         help='should be selected from 0 to 3843. #files = 3844')
 
