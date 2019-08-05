@@ -7,6 +7,7 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerModel
+from apex import amp
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -52,6 +53,8 @@ def main(args):
     optimizer = optim.Adam(params, lr=args.learning_rate)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
+    model, optimizer = amp.initialize(model, optimizer, opt_level="O1",verbosity=0)
+    
     for epoch in range(args.num_epochs):
         for phase in ['train', 'valid']:
             running_loss = 0.0
@@ -82,7 +85,8 @@ def main(args):
                     loss = criterion(outputs, video_labels)
 
                     if phase == 'train':
-                        loss.backward()
+                        with amp.scale_loss(loss, optimizer) as scaled_loss:
+                            scaled_loss.backward()
                         optimizer.step()
 
                 running_loss += loss.item() * padded_frame_rgbs.size(0)
@@ -113,7 +117,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse3/mtb/datasets/VU/active_datasets/',
+                        default='/run/media/hoosiki/WareHouse3/mtb/datasets/VU/pickled_datasets/2nd_challenge/',
                         help='input directory for video understanding challenge.')
 
     parser.add_argument('--log_dir', type=str, default='./logs',
@@ -144,7 +148,7 @@ if __name__ == '__main__':
                         help='d_ff.')
 
     parser.add_argument('--num_classes', type=int, default=1001,
-                        help='the number of classes.')
+                        help='the number of classes. 1000+1 / 3862')
 
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='dropout.')
@@ -152,7 +156,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training.')
 
-    parser.add_argument('--step_size', type=int, default=20,
+    parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay.')
 
     parser.add_argument('--gamma', type=float, default=0.1,
