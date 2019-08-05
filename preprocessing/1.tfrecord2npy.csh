@@ -4,7 +4,7 @@
 #
 # Your selections.
 #
-# data_type = 'train', 'validate', 'test'
+# data_type = 'train', 'valid', 'test'
 # which_challenge = '2nd_challenge', '3rd_challenge'
 #
 ###########################################################

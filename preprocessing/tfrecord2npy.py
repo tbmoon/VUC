@@ -103,7 +103,7 @@ if __name__ == '__main__':
                         help='base directory for input and output files.')
 
     parser.add_argument('--data_type', type=str, default='train',
-                        help='should be selected from "train", "validate", "test".')
+                        help='should be selected from "train", "valid", "test".')
 
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='should be selected from "2nd_challenge", "3rd_challenge".')
