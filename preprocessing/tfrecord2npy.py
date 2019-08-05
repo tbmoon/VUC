@@ -42,7 +42,7 @@ def main(args):
     file_paths = glob.glob(input_dir + '{}*.tfrecord'.format(args.data_type))
 
     if args.convert_labels == True:
-        df_vocab = pd.read_csv(base_dir + 'vocabulary.csv')
+        df_vocab = pd.read_csv(args.base_dir + 'vocabulary.csv')
         vocab_label2idx_dict = dict()
         for i, label in enumerate(df_vocab['Index']):
             vocab_label2idx_dict[label] = i+1
@@ -78,7 +78,7 @@ def main(args):
                         for i, video_label in enumerate(video_labels_list):
                             if video_label in vocab_label2idx_dict:
                                 video_idx = vocab_label2idx_dict[video_label]
-                                if challenge == '2nd_challenge':
+                                if args.which_challenge == '2nd_challenge':
                                     dataset['video_labels'].append(video_idx)
                                 else:
                                     if video_idx in dataset['segment_labels']:
