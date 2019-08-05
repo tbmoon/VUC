@@ -9,7 +9,7 @@ import torch.utils.data as data
 class YouTubeDataset(data.Dataset):
 
     def __init__(self, input_dir, phase, max_frame_length=301, rgb_feature_size=1024, audio_feature_size=128):
-        self.input_dir = input_dir + 'npy_formatted_frame/{}/'.format('validate' if phase is not 'test' else 'test')
+        self.input_dir = input_dir + phase + '/'
         self.df = pd.read_csv(input_dir + phase + '.csv')
         self.max_frame_length = max_frame_length
         self.rgb_feature_size = rgb_feature_size
