@@ -94,7 +94,7 @@ def main(args):
                 running_corrects += torch.sum(preds == video_labels.data)
 
             epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            epoch_acc = float(running_corrects.item()) / dataset_sizes[phase]
 
             print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Acc: {:.4f}'
                   .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_acc))
