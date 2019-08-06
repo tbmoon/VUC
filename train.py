@@ -7,7 +7,6 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerModel
-from apex import amp
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -35,8 +34,11 @@ def main(args):
         d_model=args.d_model,
         d_ff=args.d_ff,
         num_classes=args.num_classes,
-        dropout=args.dropout).to(device)
-
+        dropout=args.dropout)
+    
+    model = torch.nn.DataParallel(model)
+    model = model.to(device)
+    
     # This was important from their code. 
     # Initialize parameters with Glorot / fan_avg.
     for p in model.parameters():
@@ -53,8 +55,6 @@ def main(args):
     optimizer = optim.Adam(params, lr=args.learning_rate)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
-    model, optimizer = amp.initialize(model, optimizer, opt_level="O1",verbosity=0)
-    
     for epoch in range(args.num_epochs):
         for phase in ['train', 'valid']:
             running_loss = 0.0
@@ -85,8 +85,7 @@ def main(args):
                     loss = criterion(outputs, video_labels)
 
                     if phase == 'train':
-                        with amp.scale_loss(loss, optimizer) as scaled_loss:
-                            scaled_loss.backward()
+                        loss.backward()
                         optimizer.step()
 
                 running_loss += loss.item() * padded_frame_rgbs.size(0)
@@ -129,7 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_frame_length', type=int, default=301,
                         help='the maximum length of frame = 301.')
 
-    parser.add_argument('--n_layers', type=int, default=3,
+    parser.add_argument('--n_layers', type=int, default=6,
                         help='n_layers for the encoder.')
 
     parser.add_argument('--n_heads', type=int, default=8,
@@ -141,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame.')
 
-    parser.add_argument('--d_model', type=int, default=32,
+    parser.add_argument('--d_model', type=int, default=64,
                         help='d_model for feature projection.')
 
     parser.add_argument('--d_ff', type=int, default=128,
@@ -156,7 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training.')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=5,
                         help='period of learning rate decay.')
 
     parser.add_argument('--gamma', type=float, default=0.1,
@@ -165,10 +164,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=100,
                         help='the number of epochs.')
 
-    parser.add_argument('--batch_size', type=int, default=128,
+    parser.add_argument('--batch_size', type=int, default=256,
                         help='batch_size.')
 
-    parser.add_argument('--num_workers', type=int, default=4,
+    parser.add_argument('--num_workers', type=int, default=8,
                         help='the number of processes working on cpu.')
 
     parser.add_argument('--save_step', type=int, default=1,
