@@ -22,10 +22,10 @@ class YouTubeDataset(data.Dataset):
         frame_audio = torch.Tensor(data['frame_audio'])
 
         if self.load_labels == True:
-            video_label = np.array(data['video_labels'])
+            video_label = data['video_labels']
             video_label = random.choice(video_label)
             video_label = torch.tensor(video_label)
-            
+
         return (frame_rgb, frame_audio, video_label)
 
     def __len__(self):
