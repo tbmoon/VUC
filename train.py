@@ -1,6 +1,7 @@
 import os
 import argparse
 import numpy as np
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -56,6 +57,7 @@ def main(args):
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
     for epoch in range(args.num_epochs):
+        since = time.time()
         for phase in ['train', 'valid']:
             running_loss = 0.0
             running_corrects = 0
@@ -108,6 +110,9 @@ def main(args):
         if (epoch+1) % args.save_step == 0:
             torch.save({'epoch': epoch+1, 'state_dict': model.state_dict()},
                        os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
+        time_elapsed = time.time() - since
+        print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
+              .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
         print()
 
 
