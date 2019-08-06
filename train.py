@@ -49,7 +49,7 @@ def main(args):
     #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
     #model.load_state_dict(checkpoint['state_dict'])
     
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().to(device)
 
     params = model.parameters()
 
@@ -79,7 +79,7 @@ def main(args):
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
-                    
+
                     # outputs: [batch_size, num_classes = 1001]
                     outputs = model(padded_frame_rgbs, padded_frame_audios)
 
