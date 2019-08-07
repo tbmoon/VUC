@@ -160,7 +160,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training.')
 
-    parser.add_argument('--step_size', type=int, default=5,
+    parser.add_argument('--step_size', type=int, default=7,
                         help='period of learning rate decay.')
 
     parser.add_argument('--gamma', type=float, default=0.1,
