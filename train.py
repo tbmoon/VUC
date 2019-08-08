@@ -24,6 +24,7 @@ def main(args):
         max_frame_length=args.max_frame_length,
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
+        num_classes=args.num_classes,
         batch_size=args.batch_size,
         num_workers=args.num_workers)
 
@@ -49,7 +50,7 @@ def main(args):
     #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
     #model.load_state_dict(checkpoint['state_dict'])
     
-    criterion = nn.CrossEntropyLoss().to(device)
+    criterion = nn.BCEWithLogitsLoss().to(device)
 
     params = model.parameters()
 
@@ -61,6 +62,7 @@ def main(args):
         for phase in ['train', 'valid']:
             running_loss = 0.0
             running_corrects = 0
+            running_tp_fn = 0
 
             if phase == 'train':
                 scheduler.step()
@@ -91,20 +93,23 @@ def main(args):
                         optimizer.step()
 
                 running_loss += loss.item() * padded_frame_rgbs.size(0)
-                running_corrects += torch.sum(preds == video_labels.data)
+                running_corrects += torch.sum(video_labels[range(video_labels.size(0)), preds])
+                running_tp_fn += torch.sum(video_labels)
 
             epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = float(running_corrects.item()) / dataset_sizes[phase]
+            epoch_precision = float(running_corrects.item()) / dataset_sizes[phase]
+            epoch_recall = float(running_corrects.item()) / float(running_tp_fn.item())
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Acc: {:.4f}'
-                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_acc))
+            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Precision: {:.4f}, Recall: {:.4f}'
+                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_precision, epoch_recall))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt')
                       .format(phase, epoch+1), 'w') as f:
                 f.write(str(epoch+1) + '\t'
                         + str(epoch_loss) + '\t'
-                        + str(epoch_acc))
+                        + str(epoch_precision) + '\t'
+                        + str(epoch_recall))
 
         # Save the model check points.
         if (epoch+1) % args.save_step == 0:

@@ -8,12 +8,13 @@ import torch.utils.data as data
 
 class YouTubeDataset(data.Dataset):
 
-    def __init__(self, input_dir, phase, max_frame_length=301, rgb_feature_size=1024, audio_feature_size=128):
+    def __init__(self, input_dir, phase, max_frame_length=301, rgb_feature_size=1024, audio_feature_size=128, num_classes=1001):
         self.input_dir = input_dir + phase + '/'
         self.df = pd.read_csv(input_dir + phase + '.csv')
         self.max_frame_length = max_frame_length
         self.rgb_feature_size = rgb_feature_size
         self.audio_feature_size = audio_feature_size
+        self.num_classes = num_classes
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
@@ -21,10 +22,10 @@ class YouTubeDataset(data.Dataset):
         frame_rgb = torch.Tensor(data['frame_rgb'])
         frame_audio = torch.Tensor(data['frame_audio'])
 
-        if self.load_labels == True:
-            video_label = data['video_labels']
-            video_label = random.choice(video_label)
-            video_label = torch.tensor(video_label)
+        if self.load_labels == True:            
+            eye = torch.eye(self.num_classes)
+            indices = torch.LongTensor(data['video_labels'])
+            video_label = torch.sum(torch.index_select(eye, 0, indices), 0)
 
         return (frame_rgb, frame_audio, video_label)
 
@@ -88,6 +89,7 @@ def get_dataloader(
     max_frame_length,
     rgb_feature_size,
     audio_feature_size,
+    num_classes,
     batch_size,
     num_workers):
 
@@ -97,7 +99,8 @@ def get_dataloader(
             phase=phase,
             max_frame_length=max_frame_length,
             rgb_feature_size=rgb_feature_size,
-            audio_feature_size=audio_feature_size)
+            audio_feature_size=audio_feature_size,
+            num_classes=num_classes)
         for phase in phases}
 
     data_loaders = {
