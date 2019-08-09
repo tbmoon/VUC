@@ -50,7 +50,7 @@ def main(args):
     #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
     #model.load_state_dict(checkpoint['state_dict'])
     
-    criterion = nn.BCEWithLogitsLoss().to(device)
+    criterion = nn.BCEWithLogitsLoss(reduction='sum').to(device)
 
     params = model.parameters()
 
@@ -92,6 +92,7 @@ def main(args):
                         loss.backward()
                         optimizer.step()
 
+                # elecment in 0-th index will be counted. might be updated later.
                 running_loss += loss.item() * padded_frame_rgbs.size(0)
                 running_corrects += torch.sum(video_labels[range(video_labels.size(0)), preds])
                 running_tp_fn += torch.sum(video_labels)
