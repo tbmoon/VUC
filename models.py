@@ -213,7 +213,7 @@ class Classifier(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        x = torch.sum(x, dim=1) / x.size(1)
+        x = torch.sum(x, dim=1) / x.size(1)  # x: [batch_size, frame_length, d_model] -> [batch_size, d_model]
         x = self.dropout(F.relu(x))
         return self.w_2(self.dropout(F.relu(self.w_1(x))))
 
