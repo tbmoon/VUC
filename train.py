@@ -34,6 +34,8 @@ def main(args):
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
         d_model=args.d_model,
+        d_att=args.d_att,
+        d_hop=args.d_hop,
         d_ff=args.d_ff,
         num_classes=args.num_classes,
         dropout=args.dropout)
@@ -153,6 +155,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--d_model', type=int, default=64,
                         help='d_model for feature projection.')
+    
+    parser.add_argument('--d_att', type=int, default=80,
+                        help='d_att.')
+
+    parser.add_argument('--d_hop', type=int, default=8,
+                        help='d_hop.')
 
     parser.add_argument('--d_ff', type=int, default=128,
                         help='d_ff.')

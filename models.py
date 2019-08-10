@@ -218,11 +218,42 @@ class Classifier(nn.Module):
         return self.w_2(self.dropout(F.relu(self.w_1(x))))
 
 
+class EmbeddedClassifier(nn.Module):
+    '''
+    Implement Classifier.
+    '''
+    def __init__(self, d_model, d_att, d_hop, d_ff, num_classes, dropout=0.1):
+        super(EmbeddedClassifier, self).__init__()
+        self.w_1 = nn.Linear(d_model, d_att)
+        self.w_2 = nn.Linear(d_att, d_hop)
+        self.w_3 = nn.Linear(d_hop * d_model, d_ff)
+        self.w_4 = nn.Linear(d_ff, num_classes)
+        self.tanh = nn.Tanh()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        '''
+        inputs:
+            - x: [batch_size, frame_length, d_model]
+        outputs:
+        '''
+        batch_size = x.size(0)
+        alpha = self.tanh(self.w_1(self.dropout(x)))  # x: [batch_size, frame_length, d_att]
+        alpha = self.w_2(alpha)                       # alpha: [batch_size, frame_length, d_hop]
+        alpha = alpha.transpose(1, 2).contiguous()    # alpha: [batch_size, d_hop, frame_length]
+        alpha = F.softmax(alpha, dim=-1)              # alpha: [batch_size, d_hop, frame_length]
+        weighted_sum = torch.matmul(alpha, x)         # weighted_sum: [batch_size, d_hop, d_model]
+        output = weighted_sum.view(batch_size, -1)    # output: [batch_size, d_hop * d_model]
+        output = self.tanh(self.w_3(self.dropout(output)))  # output: [batch_size, d_ff]
+        output = self.w_4(self.dropout(output))      # output: [batch_size, num_classes]
+        return output
+
+
 class TransformerModel(nn.Module):
     '''
     Implement model based on the transformer.
     '''
-    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_model, d_ff, num_classes, dropout):
+    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_model, d_att, d_hop, d_ff, num_classes, dropout):
         super(TransformerModel, self).__init__()
         c = copy.deepcopy
         self.d_model = d_model
@@ -232,7 +263,8 @@ class TransformerModel(nn.Module):
         self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
         self.encoder = Encoder(self.encoder_layer, n_layers)
-        self.classifier = Classifier(d_model, d_ff, num_classes, dropout)
+        self.classifier = EmbeddedClassifier(d_model, d_att, d_hop, d_ff, num_classes, dropout)
+        #self.classifier = Classifier(d_model, d_ff, num_classes, dropout)
 
     def forward(self, padded_frame_rgbs, padded_frame_audios):
         '''
