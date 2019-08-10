@@ -13,6 +13,15 @@ from models import TransformerModel
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
+def Frobenius(mat):
+    size = mat.size()
+    if len(size) == 3:  # batched matrix
+        ret = (torch.sum(torch.sum((mat ** 2), 1), 1).squeeze() + 1e-10) ** 0.5
+        return torch.sum(ret) / size[0]
+    else:
+        raise Exception('matrix for computing Frobenius norm should be with 3 dims')
+
+
 def main(args):
 
     os.makedirs(args.log_dir, exist_ok=True)
@@ -51,6 +60,12 @@ def main(args):
 
     #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
     #model.load_state_dict(checkpoint['state_dict'])
+
+    I = torch.zeros(args.batch_size, args.d_hop, args.d_hop)
+    for i in range(args.batch_size):
+        for j in range(args.d_hop):
+            I.data[i][j][j] = 1
+    I = I.to(device)
     
     criterion = nn.BCEWithLogitsLoss(reduction='sum').to(device)
 
@@ -85,10 +100,13 @@ def main(args):
                     loss = 0.0
 
                     # outputs: [batch_size, num_classes = 1001]
-                    outputs = model(padded_frame_rgbs, padded_frame_audios)
+                    outputs, attns = model(padded_frame_rgbs, padded_frame_audios)
 
                     _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, video_labels)
+                    attnsT = torch.transpose(attns, 1, 2).contiguous()
+                    extra_loss = Frobenius(torch.bmm(attns, attnsT) - I[:attns.size(0)])
+                    loss += extra_loss
 
                     if phase == 'train':
                         loss.backward()

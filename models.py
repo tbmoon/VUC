@@ -246,7 +246,7 @@ class EmbeddedClassifier(nn.Module):
         output = weighted_sum.view(batch_size, -1)    # output: [batch_size, d_hop * d_model]
         output = self.tanh(self.w_3(self.dropout(output)))  # output: [batch_size, d_ff]
         output = self.w_4(self.dropout(output))      # output: [batch_size, num_classes]
-        return output
+        return output, alpha
 
 
 class TransformerModel(nn.Module):
@@ -283,6 +283,6 @@ class TransformerModel(nn.Module):
         frame_features = self.position(frame_features)
         frame_features = self.encoder(frame_features)
 
-        outputs = self.classifier(frame_features)
+        outputs, attns = self.classifier(frame_features)
 
-        return outputs
+        return outputs, attns
