@@ -238,14 +238,14 @@ class EmbeddedClassifier(nn.Module):
         outputs:
         '''
         batch_size = x.size(0)
-        alpha = self.tanh(self.w_1(self.dropout(x)))  # x: [batch_size, frame_length, d_att]
-        alpha = self.w_2(alpha)                       # alpha: [batch_size, frame_length, d_hop]
+        alpha = self.w_1(self.dropout(F.relu(x)))     # x: [batch_size, frame_length, d_att]
+        alpha = self.w_2(self.dropout(F.relu(alpha))) # alpha: [batch_size, frame_length, d_hop]
         alpha = alpha.transpose(1, 2).contiguous()    # alpha: [batch_size, d_hop, frame_length]
         alpha = F.softmax(alpha, dim=-1)              # alpha: [batch_size, d_hop, frame_length]
         weighted_sum = torch.matmul(alpha, x)         # weighted_sum: [batch_size, d_hop, d_model]
         output = weighted_sum.view(batch_size, -1)    # output: [batch_size, d_hop * d_model]
-        output = self.tanh(self.w_3(self.dropout(output)))  # output: [batch_size, d_ff]
-        output = self.w_4(self.dropout(output))      # output: [batch_size, num_classes]
+        output = self.w_3(self.dropout(F.relu(output)))  # output: [batch_size, d_ff]
+        output = self.w_4(self.dropout(F.relu(output)))  # output: [batch_size, num_classes]
         return output, alpha
 
 
