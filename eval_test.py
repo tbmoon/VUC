@@ -15,7 +15,9 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 def main(args):
-    
+
+    os.makedirs('./outputs', exist_ok=True)
+
     model = TransformerModel(
         n_layers=args.n_layers,
         n_heads=args.n_heads,
@@ -37,16 +39,16 @@ def main(args):
 
     df = pd.read_csv(args.input_dir + 'test.csv')
     
-    df_vocab = pd.read_csv('vocabulary.csv')
+    df_vocab = pd.read_csv('./preprocessing/vocabulary.csv')
     vocab_idx2label_dict = dict()
     for i, label in enumerate(df_vocab['Index']):
         vocab_idx2label_dict[i+1] = label
     
-    df_out = pd.DataFrame(columns=['class', 'video_id', 'start_time', 'attn'])
+    df_result = pd.DataFrame(columns=['class', 'video_id', 'start_time', 'attn'])
     
     for idx, video_id in enumerate(df.id):
 
-        if (idx%100 == 0):
+        if idx % 100 == 0:
             print('idx', idx)
 
         data = np.load(args.input_dir + 'test/' + video_id, allow_pickle=True).item()
@@ -67,13 +69,13 @@ def main(args):
         max_attn = np.max(attn)
         start_time = np.argmax(attn) % length // 5 * 5
 
-        df_out = df_out.append({'class': int(vocab_idx2label_dict[pred]), 
-                                'video_id': video_id[:4],
-                                'start_time': int(start_time),
-                                'attn': max_attn}, ignore_index=True)        
+        df_result = df_result.append({'class': int(vocab_idx2label_dict[pred]),
+                                      'video_id': video_id[:4],
+                                      'start_time': int(start_time),
+                                      'attn': max_attn}, ignore_index=True)        
 
-    df_out.sort_values(by=['attn'], inplace=True, ascending=False)
-    df_out.to_csv("out.csv", index=False)
+    df_result.sort_values(by=['attn'], inplace=True, ascending=False)
+    df_result.to_csv("./outputs/results.csv", index=False)
 
 
 if __name__ == '__main__':
