@@ -44,11 +44,11 @@ def main(args):
     for i, label in enumerate(df_vocab['Index']):
         vocab_idx2label_dict[i+1] = label
     
-    df_result = pd.DataFrame(columns=['class', 'video_id', 'start_time', 'attn'])
+    df_result = pd.DataFrame(columns=['Class', 'Segments', 'attn'])
     
     for idx, video_id in enumerate(df.id):
 
-        if idx % 100 == 0:
+        if idx % 500 == 0:
             print('idx', idx)
 
         data = np.load(args.input_dir + 'test/' + video_id, allow_pickle=True).item()
@@ -69,9 +69,8 @@ def main(args):
         max_attn = np.max(attn)
         start_time = np.argmax(attn) % length // 5 * 5
 
-        df_result = df_result.append({'class': int(vocab_idx2label_dict[pred]),
-                                      'video_id': video_id[:4],
-                                      'start_time': int(start_time),
+        df_result = df_result.append({'Class': int(vocab_idx2label_dict[pred]),
+                                      'Segments': str(video_id[:4]) + ':' + str(start_time),
                                       'attn': max_attn}, ignore_index=True)        
 
     df_result.sort_values(by=['attn'], inplace=True, ascending=False)
