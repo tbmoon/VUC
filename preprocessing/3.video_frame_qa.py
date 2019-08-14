@@ -22,7 +22,7 @@ for data_type in data_types:
 
     print('The number of files:', len(file_paths))
     for i, file_path in enumerate (file_paths):
-        if i % 1000 == 0:
+        if i % 10000 == 0:
             print(data_type, i)
         data = np.load(file_path, allow_pickle=True).item()
         frame_rgb_len = len(data['frame_rgb'])
