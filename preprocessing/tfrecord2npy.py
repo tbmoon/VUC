@@ -36,7 +36,7 @@ def main(args):
 
 
     input_dir = args.base_dir + 'tfrecord_datasets/{}/frame/'.format(args.which_challenge)
-    output_dir = args.base_dir + 'pickled_datasets/{}/{}/'.format(args.which_challenge, args.data_type)
+    output_dir = args.out_dir + 'pytorch_datasets/{}/{}/'.format(args.which_challenge, args.data_type)
 
     os.makedirs(output_dir, exist_ok=True)
     file_paths = glob.glob(input_dir + '{}*.tfrecord'.format(args.data_type))
@@ -101,6 +101,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--base_dir', type=str, default='/run/media/hoosiki/WareHouse3/mtb/datasets/VU/',
                         help='base directory for input and output files.')
+
+    parser.add_argument('--out_dir', type=str, default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/',
+                        help='output directory for input and output files.')
 
     parser.add_argument('--data_type', type=str, default='train',
                         help='should be selected from "train", "valid", "test".')
