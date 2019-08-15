@@ -90,7 +90,7 @@ def main(args):
             for idx, (padded_frame_rgbs, padded_frame_audios, video_labels) in enumerate(data_loaders[phase]):
                 optimizer.zero_grad()
 
-                # padded_frame_rgbs: [batch_size, max_frame_length=301, rgb_feature_size]
+                # padded_frame_rgbs: [batch_size, max_frame_length=300, rgb_feature_size]
                 padded_frame_rgbs = padded_frame_rgbs.to(device)
                 padded_frame_audios = padded_frame_audios.to(device)
                 # a label per sample: it shoulde be updated for multi-lable classification later.
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
 
-    parser.add_argument('--max_frame_length', type=int, default=301,
+    parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame = 301.')
 
     parser.add_argument('--n_layers', type=int, default=6,
