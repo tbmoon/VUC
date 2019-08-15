@@ -39,7 +39,10 @@ def main(args):
     output_dir = args.out_dir + 'pytorch_datasets/{}/{}/'.format(args.which_challenge, args.data_type)
 
     os.makedirs(output_dir, exist_ok=True)
-    file_paths = glob.glob(input_dir + '{}*.tfrecord'.format(args.data_type))
+    if args.data_type == 'train' or args.data_type == 'valid':
+        file_paths = glob.glob(input_dir + '{}*.tfrecord'.format(args.data_type))
+    else:
+        file_paths = glob.glob(input_dir + 'validate*.tfrecord')
 
     if args.convert_labels == True:
         df_vocab = pd.read_csv(args.base_dir + 'vocabulary.csv')
@@ -51,9 +54,11 @@ def main(args):
         for ifile in range(args.start, args.end):
             assert(ifile < len(file_paths))
             
-            frame_lvl_record = input_dir + '{}%04d.tfrecord'.format(args.data_type) % ifile
+            if args.data_type == 'train' or args.data_type == 'valid':
+                frame_lvl_record = input_dir + '{}%04d.tfrecord'.format(args.data_type) % ifile
+            else:
+                frame_lvl_record = input_dir + 'validate%04d.tfrecord' % ifile
             print(frame_lvl_record)
-
             tf_dataset = tf.data.TFRecordDataset(frame_lvl_record)
             tf_dataset = tf_dataset.map(parser)
             iterator = tf.compat.v1.data.make_one_shot_iterator(tf_dataset)
