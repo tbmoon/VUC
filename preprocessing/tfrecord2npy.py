@@ -39,7 +39,7 @@ def main(args):
     output_dir = args.out_dir + 'pytorch_datasets/{}/{}/'.format(args.which_challenge, args.data_type)
 
     os.makedirs(output_dir, exist_ok=True)
-    if args.data_type == 'train' or args.data_type == 'valid':
+    if args.data_type == 'train' or args.data_type == 'test':
         file_paths = glob.glob(input_dir + '{}*.tfrecord'.format(args.data_type))
     else:
         file_paths = glob.glob(input_dir + 'validate*.tfrecord')
@@ -54,7 +54,7 @@ def main(args):
         for ifile in range(args.start, args.end):
             assert(ifile < len(file_paths))
             
-            if args.data_type == 'train' or args.data_type == 'valid':
+            if args.data_type == 'train' or args.data_type == 'test':
                 frame_lvl_record = input_dir + '{}%04d.tfrecord'.format(args.data_type) % ifile
             else:
                 frame_lvl_record = input_dir + 'validate%04d.tfrecord' % ifile
