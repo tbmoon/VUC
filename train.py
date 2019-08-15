@@ -13,15 +13,6 @@ from models import TransformerModel
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-def Frobenius(mat):
-    size = mat.size()
-    if len(size) == 3:  # batched matrix
-        ret = (torch.sum(torch.sum((mat ** 2), 1), 1).squeeze() + 1e-10) ** 0.5
-        return torch.sum(ret) / size[0]
-    else:
-        raise Exception('matrix for computing Frobenius norm should be with 3 dims')
-
-
 def main(args):
 
     os.makedirs(args.log_dir, exist_ok=True)
@@ -61,13 +52,7 @@ def main(args):
     #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
     #model.load_state_dict(checkpoint['state_dict'])
 
-    I = torch.zeros(args.batch_size, args.d_hop, args.d_hop)
-    for i in range(args.batch_size):
-        for j in range(args.d_hop):
-            I.data[i][j][j] = 1
-    I = I.to(device)
-    
-    criterion = nn.BCEWithLogitsLoss(reduction='sum').to(device)
+    criterion = nn.CrossEntropyLoss().to(device)
 
     params = model.parameters()
 
@@ -79,7 +64,6 @@ def main(args):
         for phase in ['train', 'valid']:
             running_loss = 0.0
             running_corrects = 0
-            running_tp_fn = 0
 
             if phase == 'train':
                 scheduler.step()
@@ -100,13 +84,10 @@ def main(args):
                     loss = 0.0
 
                     # outputs: [batch_size, num_classes = 1001]
-                    outputs, attns = model(padded_frame_rgbs, padded_frame_audios)
+                    outputs = model(padded_frame_rgbs, padded_frame_audios)
 
                     _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, video_labels)
-                    attnsT = torch.transpose(attns, 1, 2).contiguous()
-                    extra_loss = Frobenius(torch.bmm(attns, attnsT) - I[:attns.size(0)])
-                    loss += extra_loss
 
                     if phase == 'train':
                         loss.backward()
@@ -114,23 +95,20 @@ def main(args):
 
                 # elecment in 0-th index will be counted. might be updated later.
                 running_loss += loss.item() * padded_frame_rgbs.size(0)
-                running_corrects += torch.sum(video_labels[range(video_labels.size(0)), preds])
-                running_tp_fn += torch.sum(video_labels)
+                running_corrects += torch.sum(preds == video_labels.data)
 
             epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_precision = float(running_corrects.item()) / dataset_sizes[phase]
-            epoch_recall = float(running_corrects.item()) / float(running_tp_fn.item())
+            epoch_acc = float(running_corrects.item()) / dataset_sizes[phase]
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Precision: {:.4f}, Recall: {:.4f}'
-                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_precision, epoch_recall))
+            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Acc: {:.4f}'
+                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_acc))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt')
                       .format(phase, epoch+1), 'w') as f:
                 f.write(str(epoch+1) + '\t'
                         + str(epoch_loss) + '\t'
-                        + str(epoch_precision) + '\t'
-                        + str(epoch_recall))
+                        + str(epoch_acc))
 
         # Save the model check points.
         if (epoch+1) % args.save_step == 0:

@@ -263,8 +263,8 @@ class TransformerModel(nn.Module):
         self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
         self.encoder = Encoder(self.encoder_layer, n_layers)
-        self.classifier = EmbeddedClassifier(d_model, d_att, d_hop, d_ff, num_classes, dropout)
-        #self.classifier = Classifier(d_model, d_ff, num_classes, dropout)
+        #self.classifier = EmbeddedClassifier(d_model, d_att, d_hop, d_ff, num_classes, dropout)
+        self.classifier = Classifier(d_model, d_ff, num_classes, dropout)
 
     def forward(self, padded_frame_rgbs, padded_frame_audios):
         '''
@@ -283,6 +283,6 @@ class TransformerModel(nn.Module):
         frame_features = self.position(frame_features)
         frame_features = self.encoder(frame_features)
 
-        outputs, attns = self.classifier(frame_features)
+        outputs = self.classifier(frame_features)
 
-        return outputs, attns
+        return outputs

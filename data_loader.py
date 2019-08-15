@@ -8,7 +8,7 @@ import torch.utils.data as data
 
 class YouTubeDataset(data.Dataset):
 
-    def __init__(self, input_dir, phase, max_frame_length=301, rgb_feature_size=1024, audio_feature_size=128, num_classes=1001):
+    def __init__(self, input_dir, phase, max_frame_length=300, rgb_feature_size=1024, audio_feature_size=128, num_classes=1001):
         self.input_dir = input_dir + phase + '/'
         self.df = pd.read_csv(input_dir + phase + '.csv')
         self.max_frame_length = max_frame_length
@@ -19,13 +19,18 @@ class YouTubeDataset(data.Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        frame_rgb = torch.Tensor(data['frame_rgb'])
-        frame_audio = torch.Tensor(data['frame_audio'])
+        frame_rgb = torch.Tensor(data['frame_rgb'][:self.max_frame_length])
+        frame_audio = torch.Tensor(data['frame_audio'][:self.max_frame_length])
 
-        if self.load_labels == True:            
-            eye = torch.eye(self.num_classes)
-            indices = torch.LongTensor(data['video_labels'])
-            video_label = torch.sum(torch.index_select(eye, 0, indices), 0)
+        if self.load_labels == True:
+            # - prediction with sigmoid function for multiple labels.
+            # eye = torch.eye(self.num_classes)
+            # indices = torch.LongTensor(data['video_labels'])
+            # video_label = torch.sum(torch.index_select(eye, 0, indices), 0)            
+            
+            # - prediction with softmax function for one label.
+            video_label = random.choice(data['video_labels'])
+            video_label = torch.tensor(video_label)
 
         return (frame_rgb, frame_audio, video_label)
 
@@ -62,7 +67,7 @@ def collate_fn(data):
 
     batch_size = len(frame_rgbs)
     frame_lengths = [len(frame_rgb) for frame_rgb in frame_rgbs]
-    max_frame_len = 301
+    max_frame_len = 300
     rgb_feature_size = frame_rgbs[0].size(1)
     audio_feature_size = frame_audios[0].size(1)
 
