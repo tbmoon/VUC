@@ -1,5 +1,8 @@
-# 2nd challenge
-# The number of files (train): 3,888,919
+'''
+* 2nd challenge:
+    - The number of files (train): 3,888,919
+    - The number of files (valid): 1,112,356
+'''
 
 import os
 import numpy as np
