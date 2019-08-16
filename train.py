@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
-from models import TransformerModel
+from models import TransformerEncoder, RNNDecoder
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -28,36 +28,44 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers)
 
-    model = TransformerModel(
+    encoder = TransformerEncoder(
         n_layers=args.n_layers,
         n_heads=args.n_heads,
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
         d_model=args.d_model,
-        d_att=args.d_att,
-        d_hop=args.d_hop,
+        d_ff=args.d_ff,
+        dropout=args.dropout)
+
+    decoder = RNNDecoder(
+        d_model=args.d_model,
         d_ff=args.d_ff,
         num_classes=args.num_classes,
         dropout=args.dropout)
-    
-    model = torch.nn.DataParallel(model)
-    model = model.to(device)
-    
-    # This was important from their code. 
+
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
+
+    # This was important from their code.
     # Initialize parameters with Glorot / fan_avg.
-    for p in model.parameters():
+    for p in encoder.parameters():
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
 
-    #checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
-    #model.load_state_dict(checkpoint['state_dict'])
+    if args.load_model == True:
+        checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
+        model.load_state_dict(checkpoint['state_dict'])
 
     criterion = nn.CrossEntropyLoss().to(device)
 
-    params = model.parameters()
+    encoder_params = encoder.parameters()
+    decoder_params = decoder.parameters()
 
-    optimizer = optim.Adam(params, lr=args.learning_rate)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+    encoder_optimizer = optim.Adam(encoder_params, lr=args.learning_rate)
+    decoder_optimizer = optim.Adam(decoder_params, lr=args.learning_rate)
+    
+    encoder_scheduler = lr_scheduler.StepLR(encoder_optimizer, step_size=args.step_size, gamma=args.gamma)
+    decoder_scheduler = lr_scheduler.StepLR(decoder_optimizer, step_size=args.step_size, gamma=args.gamma)
 
     for epoch in range(args.num_epochs):
         since = time.time()
@@ -66,36 +74,49 @@ def main(args):
             running_corrects = 0
 
             if phase == 'train':
-                scheduler.step()
-                model.train()
+                encoder_scheduler.step()
+                decoder_scheduler.step()
+                encoder.train()
+                decoder.train()
             else:
-                model.eval()
+                encoder.eval()
+                decoder.eval()
 
             for idx, (padded_frame_rgbs, padded_frame_audios, video_labels) in enumerate(data_loaders[phase]):
-                optimizer.zero_grad()
+                encoder_optimizer.zero_grad()
+                decoder_optimizer.zero_grad()
 
-                # padded_frame_rgbs: [batch_size, max_frame_length=300, rgb_feature_size]
+                # padded_frame_rgbs: [batch_size, max_frame_length=300, rgb_feature_size=1024]
+                # padded_frame_audios: [batch_size, max_frame_length=300, audio_feature_size=128]
+                # vidoe_labels: [batch_size]
                 padded_frame_rgbs = padded_frame_rgbs.to(device)
                 padded_frame_audios = padded_frame_audios.to(device)
-                # a label per sample: it shoulde be updated for multi-lable classification later.
                 video_labels = video_labels.to(device)
+                batch_size = video_labels.size(0)
 
                 with torch.set_grad_enabled(phase == 'train'):
                     loss = 0.0
 
-                    # outputs: [batch_size, num_classes = 1001]
-                    outputs = model(padded_frame_rgbs, padded_frame_audios)
-
-                    _, preds = torch.max(outputs, 1)
-                    loss = criterion(outputs, video_labels)
+                    # seq_features: [batch_size, seq_length=60, d_model]
+                    # decoder_input: [1, batch_size, d_model]
+                    # decoder_hidden: [1, batch_size, d_model]
+                    seq_features = encoder(padded_frame_rgbs, padded_frame_audios)
+                    decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
+                    
+                    for itarget in range(args.max_target_length):
+                        output, decoder_input, decoder_hidden = decoder(decoder_input, decoder_hidden, seq_features)
+                        _, pred = torch.max(output, 1)
+                        
+                        loss += criterion(output, video_labels)
 
                     if phase == 'train':
                         loss.backward()
-                        optimizer.step()
+                        encoder_optimizer.step()
+                        decoder_optimizer.step()
 
-                # elecment in 0-th index will be counted. might be updated later.
+                # one classe will be predicted. this should be updated.
                 running_loss += loss.item() * padded_frame_rgbs.size(0)
-                running_corrects += torch.sum(preds == video_labels.data)
+                running_corrects += torch.sum(pred == video_labels.data)
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = float(running_corrects.item()) / dataset_sizes[phase]
@@ -104,15 +125,14 @@ def main(args):
                   .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_acc))
 
             # Log the loss in an epoch.
-            with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt')
-                      .format(phase, epoch+1), 'w') as f:
-                f.write(str(epoch+1) + '\t'
-                        + str(epoch_loss) + '\t'
-                        + str(epoch_acc))
+            with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
+                f.write(str(epoch+1) + '\t' + str(epoch_loss) + '\t' + str(epoch_acc))
 
         # Save the model check points.
         if (epoch+1) % args.save_step == 0:
-            torch.save({'epoch': epoch+1, 'state_dict': model.state_dict()},
+            torch.save({'epoch': epoch+1,
+                        'encoder_state_dict': encoder.state_dict(),
+                        'decoder_state_dict': decoder.state_dict()},
                        os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
         time_elapsed = time.time() - since
         print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
@@ -133,60 +153,60 @@ if __name__ == '__main__':
 
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
+    
+    parser.add_argument('--load_model', type=bool, default=False,
+                        help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
-                        help='the maximum length of frame = 301.')
+                        help='the maximum length of frame. (301)')
+
+    parser.add_argument('--max_target_length', type=int, default=1,
+                        help='the maximum length of target. (?)')
 
     parser.add_argument('--n_layers', type=int, default=6,
-                        help='n_layers for the encoder.')
+                        help='n_layers for the encoder. (6)')
 
     parser.add_argument('--n_heads', type=int, default=8,
-                        help='n_heads for the attention.')
+                        help='n_heads for the attention. (8)')
 
     parser.add_argument('--rgb_feature_size', type=int, default=1024,
-                        help='rgb feature size in a frame.')
+                        help='rgb feature size in a frame. (1024)')
 
     parser.add_argument('--audio_feature_size', type=int, default=128,
-                        help='audio feature size in a frame.')
+                        help='audio feature size in a frame. (128)')
 
     parser.add_argument('--d_model', type=int, default=64,
-                        help='d_model for feature projection.')
-    
-    parser.add_argument('--d_att', type=int, default=80,
-                        help='d_att.')
-
-    parser.add_argument('--d_hop', type=int, default=8,
-                        help='d_hop.')
+                        help='d_model for feature projection. (64)')
 
     parser.add_argument('--d_ff', type=int, default=128,
-                        help='d_ff.')
+                        help='d_ff. (128)')
 
     parser.add_argument('--num_classes', type=int, default=1001,
-                        help='the number of classes. 1000+1 / 3862')
+                        help='the number of classes. (1000+1) / (3862)')
 
     parser.add_argument('--dropout', type=float, default=0.1,
-                        help='dropout.')
+                        help='dropout. (0.1)')
 
     parser.add_argument('--learning_rate', type=float, default=0.01,
-                        help='learning rate for training.')
+                        help='learning rate for training. (0.01)')
 
     parser.add_argument('--step_size', type=int, default=10,
-                        help='period of learning rate decay.')
+                        help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
-                        help='multiplicative factor of learning rate decay.')
+                        help='multiplicative factor of learning rate decay. (0.1)')
 
-    parser.add_argument('--num_epochs', type=int, default=100,
-                        help='the number of epochs.')
+    parser.add_argument('--num_epochs', type=int, default=5,
+                        help='the number of epochs. (100)')
 
-    parser.add_argument('--batch_size', type=int, default=256,
-                        help='batch_size.')
+    parser.add_argument('--batch_size', type=int, default=64,
+                        help='batch_size. (256)')
 
-    parser.add_argument('--num_workers', type=int, default=16,
-                        help='the number of processes working on cpu.')
+    parser.add_argument('--num_workers', type=int, default=8,
+                        help='the number of processes working on cpu. (16)')
 
     parser.add_argument('--save_step', type=int, default=1,
-                        help='save step of model.')
+                        help='save step of model. (1)')
 
     args = parser.parse_args()
 

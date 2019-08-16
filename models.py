@@ -202,59 +202,12 @@ class Encoder(nn.Module):
         return self.norm(x)
 
 
-class Classifier(nn.Module):
-    '''
-    Implement Classifier.
-    '''
-    def __init__(self, d_model, d_ff, num_classes, dropout=0.1):
-        super(Classifier, self).__init__()
-        self.w_1 = nn.Linear(d_model, d_ff)
-        self.w_2 = nn.Linear(d_ff, num_classes)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x):
-        x = torch.sum(x, dim=1) / x.size(1)  # x: [batch_size, frame_length, d_model] -> [batch_size, d_model]
-        x = self.dropout(F.relu(x))
-        return self.w_2(self.dropout(F.relu(self.w_1(x))))
-
-
-class EmbeddedClassifier(nn.Module):
-    '''
-    Implement Classifier.
-    '''
-    def __init__(self, d_model, d_att, d_hop, d_ff, num_classes, dropout=0.1):
-        super(EmbeddedClassifier, self).__init__()
-        self.w_1 = nn.Linear(d_model, d_att)
-        self.w_2 = nn.Linear(d_att, d_hop)
-        self.w_3 = nn.Linear(d_hop * d_model, d_ff)
-        self.w_4 = nn.Linear(d_ff, num_classes)
-        self.tanh = nn.Tanh()
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x):
-        '''
-        inputs:
-            - x: [batch_size, frame_length, d_model]
-        outputs:
-        '''
-        batch_size = x.size(0)
-        alpha = self.w_1(self.dropout(F.relu(x)))     # x: [batch_size, frame_length, d_att]
-        alpha = self.w_2(self.dropout(F.relu(alpha))) # alpha: [batch_size, frame_length, d_hop]
-        alpha = alpha.transpose(1, 2).contiguous()    # alpha: [batch_size, d_hop, frame_length]
-        alpha = F.softmax(alpha, dim=-1)              # alpha: [batch_size, d_hop, frame_length]
-        weighted_sum = torch.matmul(alpha, x)         # weighted_sum: [batch_size, d_hop, d_model]
-        output = weighted_sum.view(batch_size, -1)    # output: [batch_size, d_hop * d_model]
-        output = self.w_3(self.dropout(F.relu(output)))  # output: [batch_size, d_ff]
-        output = self.w_4(self.dropout(F.relu(output)))  # output: [batch_size, num_classes]
-        return output, alpha
-
-
-class TransformerModel(nn.Module):
+class TransformerEncoder(nn.Module):
     '''
     Implement model based on the transformer.
     '''
-    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_model, d_att, d_hop, d_ff, num_classes, dropout):
-        super(TransformerModel, self).__init__()
+    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_model, d_ff, dropout):
+        super(TransformerEncoder, self).__init__()
         c = copy.deepcopy
         self.d_model = d_model
         self.embedding = Embedding(rgb_feature_size, audio_feature_size, d_model)
@@ -263,8 +216,7 @@ class TransformerModel(nn.Module):
         self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
         self.encoder = Encoder(self.encoder_layer, n_layers)
-        #self.classifier = EmbeddedClassifier(d_model, d_att, d_hop, d_ff, num_classes, dropout)
-        self.classifier = Classifier(d_model, d_ff, num_classes, dropout)
+        self.avgpool1d = nn.AvgPool1d(kernel_size=5, stride=5)
 
     def forward(self, padded_frame_rgbs, padded_frame_audios):
         '''
@@ -272,10 +224,11 @@ class TransformerModel(nn.Module):
             - padded_frame_rgbs: [batch_size, frame_length, rgb_feature_size]
             - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
         outputs:
-            - outputs: [batch_size, ?]
+            - seq_features: [batch_size, seq_length, d_model]
         '''
         padded_frame_rgbs = padded_frame_rgbs / 255.
         padded_frame_audios = padded_frame_audios / 255.
+
         # frame_features: [batch_size, frame_length, feature_size]
         frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
 
@@ -283,6 +236,86 @@ class TransformerModel(nn.Module):
         frame_features = self.position(frame_features)
         frame_features = self.encoder(frame_features)
 
-        outputs = self.classifier(frame_features)
+        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, d_model, frame_length]
+        seq_features = self.avgpool1d(frame_features)    # seq_features: [batch_size, d_model, seq_length=60]
+        seq_features = seq_features.transpose(1, 2)      # seq_features: [batch_size, seq_length=60, d_model]
 
-        return outputs
+        return seq_features
+
+
+class Attn(nn.Module):
+    '''
+    Implement attention weights based on dot product. 
+    '''
+    def __init__(self, hidden_size):
+        super(Attn, self).__init__()
+        self.hidden_size = hidden_size
+
+    def dot_score(self, hidden, encoder_outputs):
+        return torch.sum(hidden * encoder_outputs, dim=2)
+
+    def forward(self, decoder_output, encoder_outputs):
+        '''        
+        inputs:
+            - decoder_output: [batch_size, 1, d_model]
+            - encoder_outputs: [batch_size, seq_length=60, d_model]
+        outputs:
+            - attn_weights: [batch_size, seq_length]
+        '''
+        attn_energies = self.dot_score(decoder_output, encoder_outputs)  # attn_energies: [batch_size, seq_length]        
+        attn_weights = F.softmax(attn_energies, dim=1)                   # attn_weights: [batch_size, seq_length]
+        attn_weights = attn_weights.unsqueeze(1)                         # attn_weights: [batch_size, 1, seq_length]
+
+        return attn_weights
+
+
+class RNNDecoder(nn.Module):
+    '''
+    Implement decoder based on the RNN family.
+    '''
+    def __init__(self, d_model, d_ff, num_classes, dropout=0.1):
+        super(RNNDecoder, self).__init__()
+        self.d_model = d_model
+        self.dropout = nn.Dropout(dropout)
+        self.gru = nn.GRU(d_model, d_model)
+        self.attn = Attn(d_model)
+        self.fc_layer1 = nn.Linear(2 * d_model, d_ff)
+        self.fc_layer2 = nn.Linear(d_ff, num_classes)
+
+    def forward(self, decoder_input, decoder_hidden, encoder_outputs):
+        '''
+        - We run this one step (class) at a time.
+        - The "contex" and "decoder_output" will be inputed to the next time step of the decoder.
+        
+        inputs:
+            - decoder_intput: [1, batch_size, d_model]
+            - decoder_hidden: [1, batch_size, d_model]
+            - encoder_outputs: [batch_size, seq_lentgh=60, d_model]
+        outputs:
+            - fc_layer2_output: [batch_size, num_classes]
+            - context: [1, batch_size, d_model]
+            - decoder_output: [1, batch_size, d_model]
+        '''
+        decoder_input = self.dropout(decoder_input)
+        decoder_output, _ = self.gru(decoder_input, decoder_hidden)  # decoder_output: [1, batch_size, d_model]
+        decoder_output = decoder_output.transpose(0, 1)              # decoder_output: [batch_size, 1, d_model]
+
+        attn_weights = self.attn(decoder_output, encoder_outputs)    # attn_weigths: [batch_size, 1, seq_length]
+        context = attn_weights.bmm(encoder_outputs)                  # context: [batch_size, 1, d_model] 
+
+        decoder_output = decoder_output.squeeze(1)                   # decoder_output: [batch_size, d_model]
+        context = context.squeeze(1)                                 # context: [batch_size, d_model]
+
+        fc_layer1_input = torch.cat((decoder_output, context), 1)    # fc_layer1_input: [batch_size, 2 * d_model]
+        fc_layer1_output = F.relu(self.fc_layer1(fc_layer1_input))   # fc_layer1_output: [batch_size, d_ff]
+
+        fc_layer2_output = self.fc_layer2(fc_layer1_output)          # fc_layer2_output: [batch_size, num_classes]        
+        #fc_layer2_output = F.softmax(fc_layer2_output, dim=1)        # fc_layer2_output: [batch_size, num_classes]
+
+        context = context.unsqueeze(0)                               # context: [1, batch_size, d_model]
+        decoder_output = decoder_output.unsqueeze(0)                 # decoder_output: [1, batch_size, d_model]
+
+        return fc_layer2_output, context, decoder_output
+
+    def init_input_hidden(self, batch_size, device):
+        return torch.zeros(1, batch_size, self.d_model).to(device), torch.zeros(1, batch_size, self.d_model).to(device)
