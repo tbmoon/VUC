@@ -261,14 +261,17 @@ class Attn(nn.Module):
             - decoder_output: [batch_size, 1, d_model]
             - encoder_outputs: [batch_size, seq_length=60, d_model]
         outputs:
-            - attn_weights: [batch_size, seq_length]
+            - raw_attn_weights: [batch_size, seq_length]
+            - norm_attn_weights: [batch_size, 1, seq_length]
         '''
         attn_energies = self.dot_score(decoder_output, encoder_outputs)  # attn_energies: [batch_size, seq_length]        
-        attn_weights = F.softmax(attn_energies, dim=1)                   # attn_weights: [batch_size, seq_length]
-        #attn_weights = self.sigmoid(attn_energies)                       # attn_weights: [batch_size, seq_length]
-        attn_weights = attn_weights.unsqueeze(1)                         # attn_weights: [batch_size, 1, seq_length]
+        raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
+        attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True)
+        
+        norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
+        norm_attn_weights = norm_attn_weights.unsqueeze(1)               # norm_attn_weights: [batch_size, 1, seq_length]
 
-        return attn_weights
+        return raw_attn_weights, norm_attn_weights
 
 
 class RNNDecoder(nn.Module):
@@ -294,16 +297,20 @@ class RNNDecoder(nn.Module):
             - decoder_hidden: [1, batch_size, d_model]
             - encoder_outputs: [batch_size, seq_lentgh=60, d_model]
         outputs:
-            - fc_layer2_output: [batch_size, num_classes]
+            - raw_attn_weights: [batch_size, seq_length]
             - context: [1, batch_size, d_model]
             - decoder_output: [1, batch_size, d_model]
+            - fc_layer2_output: [batch_size, num_classes]
         '''
         decoder_input = self.dropout(decoder_input)
         decoder_output, _ = self.gru(decoder_input, decoder_hidden)  # decoder_output: [1, batch_size, d_model]
         decoder_output = decoder_output.transpose(0, 1)              # decoder_output: [batch_size, 1, d_model]
 
-        attn_weights = self.attn(decoder_output, encoder_outputs)    # attn_weigths: [batch_size, 1, seq_length]
-        context = attn_weights.bmm(encoder_outputs)                  # context: [batch_size, 1, d_model] 
+        # raw_attn_weights: [batch_size, seq_length]
+        # norm_attn_weigths: [batch_size, 1, seq_length]
+        # context: [batch_size, 1, d_model]
+        raw_attn_weights, norm_attn_weights = self.attn(decoder_output, encoder_outputs)
+        context = norm_attn_weights.bmm(encoder_outputs) 
 
         decoder_output = decoder_output.squeeze(1)                   # decoder_output: [batch_size, d_model]
         context = context.squeeze(1)                                 # context: [batch_size, d_model]
@@ -317,7 +324,7 @@ class RNNDecoder(nn.Module):
         context = context.unsqueeze(0)                               # context: [1, batch_size, d_model]
         decoder_output = decoder_output.unsqueeze(0)                 # decoder_output: [1, batch_size, d_model]
 
-        return fc_layer2_output, context, decoder_output
+        return raw_attn_weights, context, decoder_output, fc_layer2_output
 
     def init_input_hidden(self, batch_size, device):
         return torch.zeros(1, batch_size, self.d_model).to(device), torch.zeros(1, batch_size, self.d_model).to(device)

@@ -105,7 +105,9 @@ def main(args):
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
                     
                     for itarget in range(args.max_target_length):
-                        output, decoder_input, decoder_hidden = decoder(decoder_input, decoder_hidden, seq_features)
+                        raw_attn_weights, decoder_input, decoder_hidden, output = \
+                            decoder(decoder_input, decoder_hidden, seq_features)
+
                         _, pred = torch.max(output, 1)
                         
                         loss += criterion(output, video_labels)
