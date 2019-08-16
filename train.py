@@ -54,7 +54,8 @@ def main(args):
 
     if args.load_model == True:
         checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
-        model.load_state_dict(checkpoint['state_dict'])
+        encoder.load_state_dict(checkpoint['encoder_state_dict'])
+        decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -63,7 +64,7 @@ def main(args):
 
     encoder_optimizer = optim.Adam(encoder_params, lr=args.learning_rate)
     decoder_optimizer = optim.Adam(decoder_params, lr=args.learning_rate)
-    
+
     encoder_scheduler = lr_scheduler.StepLR(encoder_optimizer, step_size=args.step_size, gamma=args.gamma)
     decoder_scheduler = lr_scheduler.StepLR(decoder_optimizer, step_size=args.step_size, gamma=args.gamma)
 
@@ -115,7 +116,7 @@ def main(args):
                         decoder_optimizer.step()
 
                 # one classe will be predicted. this should be updated.
-                running_loss += loss.item() * padded_frame_rgbs.size(0)
+                running_loss += loss.item() * batch_size
                 running_corrects += torch.sum(pred == video_labels.data)
 
             epoch_loss = running_loss / dataset_sizes[phase]
