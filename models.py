@@ -264,7 +264,8 @@ class Attn(nn.Module):
             - attn_weights: [batch_size, seq_length]
         '''
         attn_energies = self.dot_score(decoder_output, encoder_outputs)  # attn_energies: [batch_size, seq_length]        
-        attn_weights = self.sigmoid(attn_energies)                       # attn_weights: [batch_size, seq_length]
+        attn_weights = F.softmax(attn_energies, dim=1)                   # attn_weights: [batch_size, seq_length]
+        #attn_weights = self.sigmoid(attn_energies)                       # attn_weights: [batch_size, seq_length]
         attn_weights = attn_weights.unsqueeze(1)                         # attn_weights: [batch_size, 1, seq_length]
 
         return attn_weights
