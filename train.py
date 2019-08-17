@@ -53,7 +53,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-epoch-10.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
@@ -157,7 +157,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
     
-    parser.add_argument('--load_model', type=bool, default=False,
+    parser.add_argument('--load_model', type=bool, default=True,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
