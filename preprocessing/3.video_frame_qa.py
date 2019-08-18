@@ -12,11 +12,12 @@ import shutil
 # data_types = ['train', 'valid', 'test']
 # challenge = '2nd_challenge' / '3rd_challenge'
 
-data_types = ['train']
-challenge = '2nd_challenge'
+data_types = ['valid']
+challenge = '3rd_challenge'
 
 data_dir = '/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/'
 
+max_video_label_len = 0
 for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
     bad_frame_dir = data_dir + '{}/bad_datasets/{}/'.format(challenge, data_type)
@@ -39,6 +40,8 @@ for data_type in data_types:
             if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len >= 302):
                 #print(file_path)
                 shutil.move(file_path, bad_frame_dir)
+                if max_video_label_len < video_label_len:
+                    max_video_label_len = video_label_len
         else:
             assert(data_type == 'valid' or data_type == 'test')
             if (data_type == 'valid'):
@@ -46,8 +49,12 @@ for data_type in data_types:
                 if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len < max_segment_start_times):
                     print(file_path)
                     shutil.move(file_path, bad_frame_dir)
+                    if max_video_label_len < video_label_len:
+                        max_video_label_len = video_label_len
             else:
                 if (frame_rgb_len <= 10):
                     print(file_path)
                     shutil.move(file_path, bad_frame_dir)
+
+print("Max video label length:", max_video_label_len)
 print("Done!")
