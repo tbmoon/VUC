@@ -6,6 +6,7 @@
 * 3rd challenge:
     - Max video label length: 1
     - The number of files (valid): 47,087 -> 38,786
+    - The number of files (test): 44,753 -> 44,739
 '''
 
 import os
