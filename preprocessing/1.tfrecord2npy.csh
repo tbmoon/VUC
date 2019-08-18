@@ -9,7 +9,7 @@
 #
 ###########################################################
 
-set use_all_classes = False
+set use_all_classes = 'no'
 set data_type = 'valid'
 set which_challenge = '3rd_challenge'
 

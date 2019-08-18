@@ -46,7 +46,7 @@ def main(args):
         file_paths = glob.glob(input_dir + 'validate*.tfrecord')
 
     vocab_label2idx_dict = dict()
-    if args.which_challenge == '2nd_challenge' and args.use_all_classes == True:
+    if args.which_challenge == '2nd_challenge' and args.use_all_classes == 'yes':
         df_vocab = pd.read_csv('../data/2nd_challenge_vocabulary.csv')
     else:
         df_vocab = pd.read_csv('../data/3rd_challenge_vocabulary.csv')    
@@ -124,9 +124,8 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
                         help='should be selected from "2nd_challenge", "3rd_challenge".')
 
-    parser.add_argument('--use_all_classes', type=bool, default=False,
-                        help='True: use all classes in 2nd challenge. \
-                              False: use classes only in 3rd challenge')
+    parser.add_argument('--use_all_classes', type=str, default='no',
+                        help='yes: use all classes in 2nd challenge. no: use classes only in 3rd challenge')
 
     parser.add_argument('--start', type=int, default=0,
                         help='should be selected from 0 to 3843. #files = 3844')
