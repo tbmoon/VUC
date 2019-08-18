@@ -38,22 +38,19 @@ for data_type in data_types:
         if (challenge == '2nd_challenge'):
             assert(data_type == 'train' or data_type == 'valid')
             if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len >= 302):
-                #print(file_path)
                 shutil.move(file_path, bad_frame_dir)
                 if max_video_label_len < video_label_len:
                     max_video_label_len = video_label_len
         else:
             assert(data_type == 'valid' or data_type == 'test')
             if (data_type == 'valid'):
-                max_segment_start_times = max(data['segment_start_times'])
+                max_segment_start_times = 0 if video_label_len == 0 else max(data['segment_start_times'])
                 if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len < max_segment_start_times):
-                    print(file_path)
                     shutil.move(file_path, bad_frame_dir)
                     if max_video_label_len < video_label_len:
                         max_video_label_len = video_label_len
             else:
                 if (frame_rgb_len <= 10):
-                    print(file_path)
                     shutil.move(file_path, bad_frame_dir)
 
 print("Max video label length:", max_video_label_len)
