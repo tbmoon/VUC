@@ -71,13 +71,12 @@ def main(args):
                     data_record = sess.run(next_element)
                     dataset = dict()
                     dataset['video_id'] = data_record[0].decode()
-                    dataset['segment_start_times'] = list(data_record[2].values)
-                    dataset['segment_end_times'] = list(data_record[3].values)
-                    dataset['segment_labels'] = list(data_record[4].values)
-                    dataset['segment_scores'] = list(data_record[5].values)
                     dataset['frame_rgb'] = list(data_record[6])
                     dataset['frame_audio'] = list(data_record[7])
-
+                    raw_segment_start_times_list = list(data_record[2].values)
+                    raw_segment_labels_list = list(data_record[4].values)
+                    raw_segment_scores_list = list(data_record[5].values)
+                    
                     if args.which_challenge == '2nd_challenge':
                         video_labels_list = list(data_record[1].values)
                         for i, video_label in enumerate(video_labels_list):
@@ -85,11 +84,19 @@ def main(args):
                                 video_idx = vocab_label2idx_dict[video_label]
                                 dataset['video_labels'].append(video_idx)
                     else:
-                        for i, segment_label in enumerate(dataset['segment_labels']):
-                            dataset['segment_labels'][i] = vocab_label2idx_dict[segment_label] 
-                        video_labels_list = \
+                        for i, segment_label in enumerate(raw_segment_labels_list):
+                            raw_segment_labels_list[i] = vocab_label2idx_dict[segment_label] 
+
+                        segment_start_times_list = \
+                            [start for start, score 
+                             in zip(raw_segment_start_times_list, raw_segment_scores_list) if score == 1]
+                        segment_labels_list = \
                             [label for label, score 
-                             in zip(dataset['segment_labels'], dataset['segment_scores']) if score == 1]
+                             in zip(raw_segment_labels_list, raw_segment_scores_list) if score == 1]
+                        video_labels_list = segment_labels_list
+
+                        dataset['segment_start_times'] = segment_start_times_list
+                        dataset['segment_labels'] = segment_labels_list
                         dataset['video_labels'] = list(set(video_labels_list))
 
                     np.save(output_dir + dataset['video_id'] + '.npy', np.array(dataset))
