@@ -2,6 +2,10 @@
 * 2nd challenge:
     - The number of files (train): 3,888,919
     - The number of files (valid): 1,112,356
+    
+* 3rd challenge:
+    - Max video label length: 1
+    - The number of files (valid): 47,087 -> 38,786
 '''
 
 import os
