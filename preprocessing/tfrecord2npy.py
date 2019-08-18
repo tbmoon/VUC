@@ -78,6 +78,7 @@ def main(args):
                     raw_segment_scores_list = list(data_record[5].values)
                     
                     if args.which_challenge == '2nd_challenge':
+                        dataset['video_labels'] = list()
                         video_labels_list = list(data_record[1].values)
                         for i, video_label in enumerate(video_labels_list):
                             if video_label in vocab_label2idx_dict:
