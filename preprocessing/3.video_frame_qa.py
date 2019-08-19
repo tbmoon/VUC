@@ -4,7 +4,7 @@
     - The number of files (valid): 1,112,356
     
 * 3rd challenge:
-    - Max video label length: 1
+    - Max video label length: ?
     - The number of files (valid): 47,087 -> 38,786
     - The number of files (test): 44,753 -> 44,739
 '''
@@ -42,8 +42,9 @@ for data_type in data_types:
             break
         if (challenge == '2nd_challenge'):
             assert(data_type == 'train' or data_type == 'valid')
-            if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len >= 302):
+            if (frame_rgb_len <= 30 or video_label_len == 0 or frame_rgb_len >= 302):
                 shutil.move(file_path, bad_frame_dir)
+            else:
                 if max_video_label_len < video_label_len:
                     max_video_label_len = video_label_len
         else:
@@ -52,6 +53,7 @@ for data_type in data_types:
                 max_segment_start_times = 0 if video_label_len == 0 else max(data['segment_start_times'])
                 if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len < max_segment_start_times):
                     shutil.move(file_path, bad_frame_dir)
+                else:
                     if max_video_label_len < video_label_len:
                         max_video_label_len = video_label_len
             else:
