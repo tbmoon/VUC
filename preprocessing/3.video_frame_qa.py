@@ -4,7 +4,7 @@
     - The number of files (valid): 1,112,356
     
 * 3rd challenge:
-    - Max video label length: ?
+    - Max video label length: 4
     - The number of files (valid): 47,087 -> 38,786
     - The number of files (test): 44,753 -> 44,739
 '''
