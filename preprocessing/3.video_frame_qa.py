@@ -1,5 +1,6 @@
 '''
-* 2nd challenge:
+* 2nd challenge (to be updated!):
+    - Max video label length: 16
     - The number of files (train): 3,888,919
     - The number of files (valid): 1,112,356
     
