@@ -234,9 +234,9 @@ if __name__ == '__main__':
                         help='the maximum length of frame. (301)')
 
     parser.add_argument('--max_video_label_length', type=int, default=5,
-                        help='the maximum length of video label in 2nd challenge: 17. \
+                        help='the maximum length of video label in 2nd challenge: 16. \
                               the maximum length of video label in 3rd challenge: 4. \
-                              +1 for margin, not <eos>. (16) / (5)')
+                              +1 for margin, not <eos>. (17) / (5)')
 
     parser.add_argument('--n_layers', type=int, default=6,
                         help='n_layers for the encoder. (6)')
