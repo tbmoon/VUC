@@ -4,14 +4,20 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.utils.data as data
-
+import random
 
 class YouTubeDataset(data.Dataset):
 
-    def __init__(self, input_dir, phase, max_frame_length=300, rgb_feature_size=1024, audio_feature_size=128, num_classes=1001):
-        self.input_dir = input_dir + phase + '/'
-        self.df = pd.read_csv(input_dir + phase + '.csv')
+    def __init__(self, input_dir,
+                 which_challenge, phase,
+                 max_frame_length=300, max_video_length=1,
+                 rgb_feature_size=1024, audio_feature_size=128,
+                 num_classes=1001):
+        self.input_dir = input_dir + which_challenge + \
+            '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
+        self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
         self.max_frame_length = max_frame_length
+        self.max_video_length = max_video_length
         self.rgb_feature_size = rgb_feature_size
         self.audio_feature_size = audio_feature_size
         self.num_classes = num_classes
@@ -23,16 +29,10 @@ class YouTubeDataset(data.Dataset):
         frame_audio = torch.Tensor(data['frame_audio'][:self.max_frame_length])
 
         if self.load_labels == True:
-            # - prediction with sigmoid function for multiple labels.
-            # eye = torch.eye(self.num_classes)
-            # indices = torch.LongTensor(data['video_labels'])
-            # video_label = torch.sum(torch.index_select(eye, 0, indices), 0)            
-            
-            # - prediction with softmax function for one label.
-            video_label = random.choice(data['video_labels'])
+            video_label = random.sample(data['video_labels'], len(data['video_labels']))
             video_label = torch.tensor(video_label)
 
-        return (frame_rgb, frame_audio, video_label)
+        return (frame_rgb, frame_audio, video_label, self.max_frame_length, self.max_video_length)
 
     def __len__(self):
         return len(self.df)
@@ -40,41 +40,49 @@ class YouTubeDataset(data.Dataset):
 
 def collate_fn(data):
     """
-    Create mini-batch tensors from the list of tuples (frame_rgb, frame_audio, video_label).
+    Create mini-batch tensors from the list of tuples.
+    tuple = (frame_rgb, frame_audio, video_label, max_frame_length, max_video_length).
 
     We should build custom collate_fn rather than using default collate_fn,
-    because merging frame_rgb and frame_audio (including padding) is not supported in default.
+    because merging frame_rgb, frame_audio and video_label (including padding) is not supported in default.
 
     Args:
-    data: list of tuple (frame_rgb, frame_audio, video_label).
+    data: list of tuple (frame_rgb, frame_audio, video_label, max_frame_length, max_video_length).
         - frame_rgb: torch tensor of shape (variable_length, rgb_feature_size=1024).
         - frame_audio: torch tensor of shape (variable_length, audio_feature_size=128).
-        - video_label: torch tensor of shape (1).
+        - video_label: torch tensor of shape (variable_length).
+        - max_frame_length: torch tensor of shape (1).
+        - max_video_length: torch tensor of shape (1).
 
     Returns:
-        - padded_frame_rgbs: torch tensor of shape (batch_size, padded_length, rgb_feature_size=1024).
-        - padded_frame_audios: torch tensor of shape (batch_size, padded_length, audio_feature_size=128).
-        - video_labels: torch tensor of shape (batch_size, 1) 
+        - padded_frame_rgbs: torch tensor of shape (batch_size, max_frame_length, rgb_feature_size=1024).
+        - padded_frame_audios: torch tensor of shape (batch_size, max_frame_length, audio_feature_size=128).
+        - padded_video_labels: torch tensor of shape (batch_size, max_video_length + 1).
     """
-    
-    # Sort a data list by caption length (descending order).
-    data.sort(key=lambda x: len(x[0]), reverse=True)
 
+    # Sort a data list by video_label length (descending order).
+    data.sort(key=lambda x: len(x[2]), reverse=True)
+    
     # frame_rgbs:   tuple of frame_rgb
     # frame_audios: tuple of frame_audio
     # video_labels: tuple of video_label
-    frame_rgbs, frame_audios, video_labels = zip(*data)
+    # max_frame_lengths: tuple of max_frame_length
+    # max_video_lengths: tuple of max_video_length
+    frame_rgbs, frame_audios, video_labels, max_frame_lengths, max_video_lengths = zip(*data)
 
     batch_size = len(frame_rgbs)
+    max_frame_len = max_frame_lengths[0]
+    max_video_len = max_video_lengths[0]
     frame_lengths = [len(frame_rgb) for frame_rgb in frame_rgbs]
-    max_frame_len = 300
+    video_lengths = [len(video_label) for video_label in video_labels]
     rgb_feature_size = frame_rgbs[0].size(1)
     audio_feature_size = frame_audios[0].size(1)
 
     padded_frame_rgbs = torch.zeros(batch_size, max_frame_len, rgb_feature_size)
     padded_frame_audios = torch.zeros(batch_size, max_frame_len, audio_feature_size)
+    padded_video_labels = torch.zeros((batch_size, max_video_len), dtype=torch.int64)
 
-    # Merge frame_rgbs and frame_audio in a mini-batch
+    # Merge frame_rgbs, frame_audios, video_labels in a mini-batch
     for i, frame_rgb in enumerate(frame_rgbs):
         end = frame_lengths[i]
         padded_frame_rgbs[i, :end] = frame_rgb
@@ -82,16 +90,20 @@ def collate_fn(data):
     for i, frame_audio in enumerate(frame_audios):
         end = frame_lengths[i]
         padded_frame_audios[i, :end] = frame_audio
+        
+    for i, video_label in enumerate(video_labels):
+        end = video_lengths[i]
+        padded_video_labels[i, :end] = video_label
 
-    video_labels = torch.stack(video_labels, 0)
-
-    return padded_frame_rgbs, padded_frame_audios, video_labels
+    return padded_frame_rgbs, padded_frame_audios, padded_video_labels
 
 
 def get_dataloader(
     input_dir,
+    which_challenge,
     phases,
     max_frame_length,
+    max_video_length,
     rgb_feature_size,
     audio_feature_size,
     num_classes,
@@ -101,8 +113,10 @@ def get_dataloader(
     youtube_datasets = {
         phase: YouTubeDataset(
             input_dir=input_dir,
+            which_challenge=which_challenge,
             phase=phase,
             max_frame_length=max_frame_length,
+            max_video_length=max_video_length,
             rgb_feature_size=rgb_feature_size,
             audio_feature_size=audio_feature_size,
             num_classes=num_classes)

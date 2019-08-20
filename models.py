@@ -286,6 +286,7 @@ class RNNDecoder(nn.Module):
         self.attn = Attn(d_model)
         self.fc_layer1 = nn.Linear(2 * d_model, d_ff)
         self.fc_layer2 = nn.Linear(d_ff, num_classes)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, decoder_input, decoder_hidden, encoder_outputs):
         '''
@@ -319,7 +320,7 @@ class RNNDecoder(nn.Module):
         fc_layer1_output = F.relu(self.fc_layer1(fc_layer1_input))   # fc_layer1_output: [batch_size, d_ff]
 
         fc_layer2_output = self.fc_layer2(fc_layer1_output)          # fc_layer2_output: [batch_size, num_classes]        
-        #fc_layer2_output = F.softmax(fc_layer2_output, dim=1)        # fc_layer2_output: [batch_size, num_classes]
+        #fc_layer2_output = F.softmax(fc_layer2_output, dim=1)
 
         context = context.unsqueeze(0)                               # context: [1, batch_size, d_model]
         decoder_output = decoder_output.unsqueeze(0)                 # decoder_output: [1, batch_size, d_model]

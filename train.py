@@ -5,12 +5,70 @@ import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F 
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerEncoder, RNNDecoder
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+
+def cross_entropy_loss_with_logit(logit, label):
+    '''
+    inputs:
+        - logit: [batch_size, num_classes]
+        - label: [batch_size]
+    outputs:
+        - loss: [1]
+        - label_size: [1]
+    '''
+    loss, label_size = 0.0, 0
+    condition = label > 0
+    if condition.sum() == 0:
+        return loss, label_size
+
+    logit = logit[condition, :]
+    label = label[condition]
+    criterion = torch.nn.CrossEntropyLoss(reduction='sum')
+
+    loss = criterion(logit, label)
+    label_size = label.size(0)
+    return loss, label_size
+
+
+def bce_with_logits(logit, label):
+    #inputs:
+    #    - logit: [batch_size, num_classes]
+    #    - label: [batch_size]
+    #outputs:
+    #    - loss: [1]
+    #    - label_size: [1]
+    assert logit.dim() == 2 and label.dim() == 1
+
+    alpha = 0.001
+    batch_size = label.size(0)
+    num_classes = logit.size(1)
+    
+    sigmoid = torch.nn.Sigmoid()
+    prob = sigmoid(logit)
+    
+    one_hot_label = torch.zeros(batch_size, num_classes).to(device)
+    one_hot_label[range(batch_size), label] = 1
+    
+    # Exclude logit and label if label is no class (=0).
+    condition = label > 0.5
+    if condition.sum() == 0:
+        return 0.0, 0
+    
+    prob = prob[condition, :]
+    one_hot_label = one_hot_label[condition, :]
+    
+    loss = -(one_hot_label * (1 - alpha) * (1 - prob) * torch.log(prob) + 
+             (1 - one_hot_label) * alpha * prob * torch.log(1 - prob)).mean()  
+    label_size = one_hot_label.size(0) * one_hot_label.size(1)
+    
+    return loss, label_size
 
 
 def main(args):
@@ -20,8 +78,10 @@ def main(args):
 
     data_loaders, dataset_sizes = get_dataloader(
         input_dir=args.input_dir,
+        which_challenge=args.which_challenge,
         phases=['train', 'valid'],
         max_frame_length=args.max_frame_length,
+        max_video_length=args.max_video_label_length,
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
         num_classes=args.num_classes,
@@ -53,11 +113,9 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-10.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
-
-    criterion = nn.CrossEntropyLoss().to(device)
 
     encoder_params = encoder.parameters()
     decoder_params = decoder.parameters()
@@ -71,8 +129,9 @@ def main(args):
     for epoch in range(args.num_epochs):
         since = time.time()
         for phase in ['train', 'valid']:
-            running_loss = 0.0
-            running_corrects = 0
+            running_video_loss = 0.0
+            running_video_label_size = 0
+            running_video_corrects = 0
 
             if phase == 'train':
                 encoder_scheduler.step()
@@ -89,47 +148,55 @@ def main(args):
 
                 # padded_frame_rgbs: [batch_size, max_frame_length=300, rgb_feature_size=1024]
                 # padded_frame_audios: [batch_size, max_frame_length=300, audio_feature_size=128]
-                # vidoe_labels: [batch_size]
+                # vidoe_labels: [batch_size, max_video_label_length]
                 padded_frame_rgbs = padded_frame_rgbs.to(device)
                 padded_frame_audios = padded_frame_audios.to(device)
                 video_labels = video_labels.to(device)
                 batch_size = video_labels.size(0)
 
                 with torch.set_grad_enabled(phase == 'train'):
-                    loss = 0.0
+                    total_loss = 0.0
+                    video_loss = 0.0
+                    video_label_size = 0
+                    video_corrects = 0
 
                     # seq_features: [batch_size, seq_length=60, d_model]
                     # decoder_input: [1, batch_size, d_model]
                     # decoder_hidden: [1, batch_size, d_model]
                     seq_features = encoder(padded_frame_rgbs, padded_frame_audios)
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
-                    
-                    for itarget in range(args.max_target_length):
-                        raw_attn_weights, decoder_input, decoder_hidden, output = \
-                            decoder(decoder_input, decoder_hidden, seq_features)
 
-                        _, pred = torch.max(output, 1)
-                        
-                        loss += criterion(output, video_labels)
+                    for itarget in range(args.max_video_label_length):
+                        raw_attn_weights, decoder_input, decoder_hidden, video_logit = \
+                            decoder(decoder_input, decoder_hidden, seq_features)
+                        video_label = video_labels.t()[itarget]
+                        _, video_pred = torch.max(video_logit, dim=1)
+
+                        loss, label_size = cross_entropy_loss_with_logit(video_logit, video_label)
+                        video_loss += loss
+                        video_label_size += label_size
+                        video_corrects += torch.sum(video_pred == video_label.data)
+
+                    total_loss = video_loss / video_label_size
 
                     if phase == 'train':
-                        loss.backward()
+                        total_loss.backward()
                         encoder_optimizer.step()
                         decoder_optimizer.step()
 
-                # one classe will be predicted. this should be updated.
-                running_loss += loss.item() * batch_size
-                running_corrects += torch.sum(pred == video_labels.data)
+                running_video_loss += video_loss.item()
+                running_video_label_size += video_label_size
+                running_video_corrects += video_corrects.item()
 
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = float(running_corrects.item()) / dataset_sizes[phase]
+            epoch_video_loss = running_video_loss / running_video_label_size
+            epoch_video_acc = float(running_video_corrects) / running_video_label_size
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Loss: {:.4f}, Acc: {:.4f}'
-                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_loss, epoch_acc))
+            print('| {} SET | Epoch [{:02d}/{:02d}], Video Loss: {:.4f}, Video Acc: {:.4f}'
+                  .format(phase.upper(), epoch+1, args.num_epochs, epoch_video_loss, epoch_video_acc))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
-                f.write(str(epoch+1) + '\t' + str(epoch_loss) + '\t' + str(epoch_acc))
+                f.write(str(epoch+1) + '\t' + str(epoch_video_loss) + '\t' + str(epoch_video_acc))
 
         # Save the model check points.
         if (epoch+1) % args.save_step == 0:
@@ -148,7 +215,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse3/mtb/datasets/VU/pickled_datasets/2nd_challenge/',
+                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
     parser.add_argument('--log_dir', type=str, default='./logs',
@@ -156,15 +223,20 @@ if __name__ == '__main__':
 
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
-    
-    parser.add_argument('--load_model', type=bool, default=True,
+
+    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
+                        help='(2nd_challenge) / (3rd_challenge).')
+
+    parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
 
-    parser.add_argument('--max_target_length', type=int, default=1,
-                        help='the maximum length of target. (?)')
+    parser.add_argument('--max_video_label_length', type=int, default=5,
+                        help='the maximum length of video label in 2nd challenge: 17. \
+                              the maximum length of video label in 3rd challenge: 4. \
+                              +1 for margin, not <eos>. (16) / (5)')
 
     parser.add_argument('--n_layers', type=int, default=6,
                         help='n_layers for the encoder. (6)')
@@ -185,7 +257,7 @@ if __name__ == '__main__':
                         help='d_ff. (128)')
 
     parser.add_argument('--num_classes', type=int, default=1001,
-                        help='the number of classes. (1000+1) / (3862)')
+                        help='the number of classes. (1000+1) / (3862+1)')
 
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='dropout. (0.1)')
@@ -202,10 +274,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=100,
                         help='the number of epochs. (100)')
 
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size. (256)')
+    parser.add_argument('--batch_size', type=int, default=128,
+                        help='batch_size. (64) / (256)')
 
-    parser.add_argument('--num_workers', type=int, default=8,
+    parser.add_argument('--num_workers', type=int, default=16,
                         help='the number of processes working on cpu. (16)')
 
     parser.add_argument('--save_step', type=int, default=1,
