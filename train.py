@@ -5,7 +5,8 @@ import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F 
+import torch.nn.functional as F
+from torch import autograd
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerEncoder, RNNDecoder
@@ -14,27 +15,38 @@ from models import TransformerEncoder, RNNDecoder
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-def cross_entropy_loss_with_logit(logit, label):
+def cross_entropy_loss_with_video_label_processing(logit, labels):
     '''
     inputs:
         - logit: [batch_size, num_classes]
-        - label: [batch_size]
+        - labels: [batch_size, max_video_label_length]
     outputs:
         - loss: [1]
-        - label_size: [1]
+        - labels: [batch_size, max_video_label_length]
+        - selected_label: [batch_size]
     '''
-    loss, label_size = 0.0, 0
-    condition = label > 0
-    if condition.sum() == 0:
-        return loss, label_size
+    batch_size = logit.size(0)
+    num_classes = logit.size(1)
+    max_video_label_length = labels.size(1)
+    
+    # Do not include 0-label prediction in softmax calculation.
+    prob = F.softmax(logit[:, 1:], dim=1)
+    zero_col = torch.zeros(batch_size, 1).to(device)
+    prob = torch.cat((zero_col, prob), dim=1)
+    
+    # Probability of predicted labels.
+    prob_candidates = torch.gather(prob, 1, labels)
+    selected_prob, selected_label_idx = torch.max(prob_candidates, dim=1)
+    selected_label = labels[range(batch_size), selected_label_idx]
+    mask = selected_label.float().ge(0.5)
+    
+    zeros = torch.zeros(batch_size, max_video_label_length).to(device)
+    labels = torch.where(labels == selected_label.view(-1, 1), zeros, labels.float())
+    labels = labels.long()
 
-    logit = logit[condition, :]
-    label = label[condition]
-    criterion = torch.nn.CrossEntropyLoss(reduction='sum')
+    loss = -torch.log(selected_prob).masked_select(mask).sum()
 
-    loss = criterion(logit, label)
-    label_size = label.size(0)
-    return loss, label_size
+    return loss, labels, selected_label
 
 
 def bce_with_logits(logit, label):
@@ -153,11 +165,11 @@ def main(args):
                 padded_frame_audios = padded_frame_audios.to(device)
                 video_labels = video_labels.to(device)
                 batch_size = video_labels.size(0)
+                video_label_size = video_labels.float().ge(0.5).sum()
 
                 with torch.set_grad_enabled(phase == 'train'):
                     total_loss = 0.0
                     video_loss = 0.0
-                    video_label_size = 0
                     video_corrects = 0
 
                     # seq_features: [batch_size, seq_length=60, d_model]
@@ -165,17 +177,18 @@ def main(args):
                     # decoder_hidden: [1, batch_size, d_model]
                     seq_features = encoder(padded_frame_rgbs, padded_frame_audios)
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
+                    
 
                     for itarget in range(args.max_video_label_length):
                         raw_attn_weights, decoder_input, decoder_hidden, video_logit = \
                             decoder(decoder_input, decoder_hidden, seq_features)
-                        video_label = video_labels.t()[itarget]
                         _, video_pred = torch.max(video_logit, dim=1)
 
-                        loss, label_size = cross_entropy_loss_with_logit(video_logit, video_label)
+                        loss, video_labels, selected_video_label = \
+                            cross_entropy_loss_with_video_label_processing(video_logit, video_labels)
+
                         video_loss += loss
-                        video_label_size += label_size
-                        video_corrects += torch.sum(video_pred == video_label.data)
+                        video_corrects += torch.sum(video_pred == selected_video_label.data)
 
                     total_loss = video_loss / video_label_size
 
@@ -187,7 +200,7 @@ def main(args):
                         decoder_optimizer.step()
 
                 running_video_loss += video_loss.item()
-                running_video_label_size += video_label_size
+                running_video_label_size += video_label_size.item()
                 running_video_corrects += video_corrects.item()
 
             epoch_video_loss = running_video_loss / running_video_label_size
