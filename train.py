@@ -181,6 +181,8 @@ def main(args):
 
                     if phase == 'train':
                         total_loss.backward()
+                        _ = nn.utils.clip_grad_norm_(encoder.parameters(), args.clip)
+                        _ = nn.utils.clip_grad_norm_(decoder.parameters(), args.clip)
                         encoder_optimizer.step()
                         decoder_optimizer.step()
 
@@ -224,7 +226,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
 
-    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
+    parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
     parser.add_argument('--load_model', type=bool, default=False,
@@ -233,7 +235,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
 
-    parser.add_argument('--max_video_label_length', type=int, default=5,
+    parser.add_argument('--max_video_label_length', type=int, default=17,
                         help='the maximum length of video label in 2nd challenge: 16. \
                               the maximum length of video label in 3rd challenge: 4. \
                               +1 for margin, not <eos>. (17) / (5)')
@@ -264,6 +266,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--learning_rate', type=float, default=0.01,
                         help='learning rate for training. (0.01)')
+
+    parser.add_argument('--clip', type=float, default=0.25,
+                        help='gradient clipping. (0.25)')
 
     parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay. (10)')
