@@ -17,7 +17,7 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 def cross_entropy_loss_with_video_label_processing(logit, labels):
     '''
     inputs:
-        - logit: [batch_size, num_classes]
+        - logit: [batch_size, num_classes - 1]
         - labels: [batch_size, max_video_label_length]
     outputs:
         - loss: [1]
@@ -25,11 +25,10 @@ def cross_entropy_loss_with_video_label_processing(logit, labels):
         - selected_label: [batch_size]
     '''
     batch_size = logit.size(0)
-    num_classes = logit.size(1)
     max_video_label_length = labels.size(1)
     
-    # Do not include 0-label prediction in softmax calculation.
-    prob = F.softmax(logit[:, 1:], dim=1)
+    # Do NOT include 0-label prediction in softmax calculation.
+    prob = F.softmax(logit, dim=1)
     zero_col = torch.zeros(batch_size, 1).to(device)
     prob = torch.cat((zero_col, prob), dim=1)
     
@@ -124,7 +123,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-10.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
@@ -180,7 +179,11 @@ def main(args):
                     for itarget in range(args.max_video_label_length):
                         raw_attn_weights, decoder_input, decoder_hidden, video_logit = \
                             decoder(decoder_input, decoder_hidden, seq_features)
+
+                        # Do NOT include 0-label in softmax calculation and prediction.
+                        video_logit = video_logit[:, 1:]
                         _, video_pred = torch.max(video_logit, dim=1)
+                        video_pred = video_pred + 1
 
                         loss, video_labels, selected_video_label = \
                             cross_entropy_loss_with_video_label_processing(video_logit, video_labels)
