@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch import autograd
 from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerEncoder, RNNDecoder
@@ -177,7 +176,6 @@ def main(args):
                     # decoder_hidden: [1, batch_size, d_model]
                     seq_features = encoder(padded_frame_rgbs, padded_frame_audios)
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
-                    
 
                     for itarget in range(args.max_video_label_length):
                         raw_attn_weights, decoder_input, decoder_hidden, video_logit = \
