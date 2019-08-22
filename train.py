@@ -124,7 +124,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-epoch-10.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
@@ -186,7 +186,12 @@ def main(args):
                             cross_entropy_loss_with_video_label_processing(video_logit, video_labels)
 
                         video_loss += loss
-                        video_corrects += torch.sum(video_pred == selected_video_label.data)
+                        
+                        zeros = torch.zeros(batch_size, dtype=torch.long).to(device)
+                        mask = 1 - torch.eq(selected_video_label, zeros)
+                        video_correct = torch.eq(selected_video_label, video_pred)
+                        video_correct = video_correct.masked_select(mask)
+                        video_corrects += torch.sum(video_correct)
 
                     total_loss = video_loss / video_label_size
 
@@ -240,7 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--load_model', type=bool, default=False,
+    parser.add_argument('--load_model', type=bool, default=True,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -275,7 +280,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='dropout. (0.1)')
 
-    parser.add_argument('--learning_rate', type=float, default=0.01,
+    parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate for training. (0.01)')
 
     parser.add_argument('--clip', type=float, default=0.25,
