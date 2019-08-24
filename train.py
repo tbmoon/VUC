@@ -24,6 +24,7 @@ def cross_entropy_loss_with_video_label_processing(logit, labels):
         - labels: [batch_size, max_video_label_length]
         - selected_label: [batch_size]
     '''
+    eps = 1e-6
     batch_size = logit.size(0)
     max_video_label_length = labels.size(1)
     
@@ -42,7 +43,7 @@ def cross_entropy_loss_with_video_label_processing(logit, labels):
     labels = torch.where(labels == selected_label.view(-1, 1), zeros, labels.float())
     labels = labels.long()
 
-    loss = -torch.log(selected_prob).masked_select(mask).sum()
+    loss = -torch.log(selected_prob + eps).masked_select(mask).sum()
 
     return loss, labels, selected_label
 
@@ -123,7 +124,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-01.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-pretrained.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
@@ -189,7 +190,7 @@ def main(args):
                             cross_entropy_loss_with_video_label_processing(video_logit, video_labels)
 
                         video_loss += loss
-                        
+
                         zeros = torch.zeros(batch_size, dtype=torch.long).to(device)
                         mask = 1 - torch.eq(selected_video_label, zeros)
                         video_correct = torch.eq(selected_video_label, video_pred)
@@ -245,7 +246,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
 
-    parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
+    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
     parser.add_argument('--load_model', type=bool, default=True,
@@ -254,7 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
 
-    parser.add_argument('--max_video_label_length', type=int, default=17,
+    parser.add_argument('--max_video_label_length', type=int, default=5,
                         help='the maximum length of video label in 2nd challenge: 16. \
                               the maximum length of video label in 3rd challenge: 4. \
                               +1 for margin, not <eos>. (17) / (5)')
