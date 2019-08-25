@@ -24,8 +24,8 @@ challenge = '3rd_challenge'
 
 data_dir = '/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/'
 
-max_video_label_len = 0
-max_segment_label_len = 0
+max_vid_label_len = 0
+max_seg_label_len = 0
 for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
     bad_frame_dir = data_dir + '{}/bad_datasets/{}/'.format(challenge, data_type)
@@ -39,33 +39,33 @@ for data_type in data_types:
         data = np.load(file_path, allow_pickle=True).item()
         frame_rgb_len = len(data['frame_rgb'])
         frame_audio_len = len(data['frame_audio'])
-        video_label_len = len(data['video_labels'])
-        segment_label_len = len(data['segment_labels'])
+        vid_label_len = len(data['video_labels'])
+        seg_label_len = len(data['segment_labels'])
         if (frame_rgb_len != frame_audio_len):
             print('(ERROR) - check if frame length is correct or not!')
             break
         if (challenge == '2nd_challenge'):
             assert(data_type == 'train' or data_type == 'valid')
-            if (frame_rgb_len <= 30 or video_label_len == 0 or frame_rgb_len >= 302):
+            if (frame_rgb_len <= 30 or vid_label_len == 0 or frame_rgb_len >= 302):
                 shutil.move(file_path, bad_frame_dir)
             else:
-                if max_video_label_len < video_label_len:
-                    max_video_label_len = video_label_len
+                if max_vid_label_len < vid_label_len:
+                    max_vid_label_len = vid_label_len
         else:
             assert(data_type == 'valid' or data_type == 'test')
             if (data_type == 'valid'):
-                max_segment_start_times = 0 if video_label_len == 0 else max(data['segment_start_times'])
-                if (frame_rgb_len <= 10 or video_label_len == 0 or frame_rgb_len < max_segment_start_times):
+                max_seg_start_times = 0 if vid_label_len == 0 else max(data['segment_times'] * 5)
+                if (frame_rgb_len <= 10 or vid_label_len == 0 or frame_rgb_len < max_seg_start_times):
                     shutil.move(file_path, bad_frame_dir)
                 else:
-                    if max_video_label_len < video_label_len:
-                        max_video_label_len = video_label_len
-                    if max_segment_label_len < segment_label_len:
-                        max_segment_label_len = segment_label_len
+                    if max_vid_label_len < vid_label_len:
+                        max_vid_label_len = vid_label_len
+                    if max_seg_label_len < seg_label_len:
+                        max_seg_label_len = seg_label_len
             else:
                 if (frame_rgb_len <= 10):
                     shutil.move(file_path, bad_frame_dir)
 
-print("Max video label length:", max_video_label_len)
-print("Max segment label length:", max_segment_label_len)
+print("Max video label length:", max_vid_label_len)
+print("Max segment label length:", max_seg_label_len)
 print("Done!")
