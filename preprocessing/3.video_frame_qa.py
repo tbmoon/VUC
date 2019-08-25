@@ -6,6 +6,7 @@
     
 * 3rd challenge:
     - Max video label length: 4
+    - Max segment label length: 15
     - The number of files (valid): 47,087 -> 38,786
     - The number of files (test): 44,753 -> 44,739
 '''
@@ -24,6 +25,7 @@ challenge = '3rd_challenge'
 data_dir = '/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/'
 
 max_video_label_len = 0
+max_segment_label_len = 0
 for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
     bad_frame_dir = data_dir + '{}/bad_datasets/{}/'.format(challenge, data_type)
@@ -38,6 +40,7 @@ for data_type in data_types:
         frame_rgb_len = len(data['frame_rgb'])
         frame_audio_len = len(data['frame_audio'])
         video_label_len = len(data['video_labels'])
+        segment_label_len = len(data['segment_labels'])
         if (frame_rgb_len != frame_audio_len):
             print('(ERROR) - check if frame length is correct or not!')
             break
@@ -57,9 +60,12 @@ for data_type in data_types:
                 else:
                     if max_video_label_len < video_label_len:
                         max_video_label_len = video_label_len
+                    if max_segment_label_len < segment_label_len:
+                        max_segment_label_len = segment_label_len
             else:
                 if (frame_rgb_len <= 10):
                     shutil.move(file_path, bad_frame_dir)
 
 print("Max video label length:", max_video_label_len)
+print("Max segment label length:", max_segment_label_len)
 print("Done!")
