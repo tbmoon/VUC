@@ -68,15 +68,21 @@ def main(args):
             next_element = iterator.get_next()
             try:
                 while True:
+                    '''
+                        - data_record[2] for segment start time.
+                        - data_record[3] for segment end time.
+                        - segment end time is used instead of start time due to background (index = 0).
+                    '''
                     data_record = sess.run(next_element)
                     dataset = dict()
                     dataset['video_id'] = data_record[0].decode()
                     dataset['frame_rgb'] = list(data_record[6])
                     dataset['frame_audio'] = list(data_record[7])
-                    raw_segment_start_times_list = list(data_record[2].values)
+
+                    raw_segment_start_times_list = list(data_record[3].values)
                     raw_segment_labels_list = list(data_record[4].values)
                     raw_segment_scores_list = list(data_record[5].values)
-                    
+
                     if args.which_challenge == '2nd_challenge':
                         dataset['video_labels'] = list()
                         video_labels_list = list(data_record[1].values)
@@ -89,7 +95,7 @@ def main(args):
                             raw_segment_labels_list[i] = vocab_label2idx_dict[segment_label] 
 
                         segment_start_times_list = \
-                            [start for start, score 
+                            [start / 5 for start, score 
                              in zip(raw_segment_start_times_list, raw_segment_scores_list) if score == 1]
                         segment_labels_list = \
                             [label for label, score 
