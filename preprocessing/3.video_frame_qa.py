@@ -7,7 +7,7 @@
 * 3rd challenge:
     - Max video label length: 4
     - Max segment label length: 15
-    - The number of files (valid): 47,087 -> 38,786
+    - The number of files (valid): 47,087 -> 38,788
     - The number of files (test): 44,753 -> 44,739
 '''
 
