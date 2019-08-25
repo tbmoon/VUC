@@ -24,15 +24,15 @@ def main(args):
         contexts, sequences = tf.io.parse_single_sequence_example(record,
                                                                   context_features=context_features,
                                                                   sequence_features=sequence_features)
-        video_id = contexts['id']
-        video_labels = contexts['labels']
-        segment_start_times = contexts['segment_start_times']
-        segment_end_times = contexts['segment_end_times']
-        segment_labels = contexts['segment_labels']
-        segment_scores = contexts['segment_scores']
+        vid_id = contexts['id']
+        vid_labels = contexts['labels']
+        seg_start_times = contexts['segment_start_times']
+        seg_end_times = contexts['segment_end_times']
+        seg_labels = contexts['segment_labels']
+        seg_scores = contexts['segment_scores']
         frame_rgb = tf.reshape(tf.decode_raw(sequences['rgb'], tf.uint8), [-1, 1024])
         frame_audio = tf.reshape(tf.decode_raw(sequences['audio'], tf.uint8), [-1, 128])
-        return video_id, video_labels, segment_start_times, segment_end_times, segment_labels, segment_scores, frame_rgb, frame_audio
+        return vid_id, vid_labels, seg_start_times, seg_end_times, seg_labels, seg_scores, frame_rgb, frame_audio
 
     assert(args.which_challenge == '2nd_challenge' or args.which_challenge == '3rd_challenge')
 
@@ -69,9 +69,9 @@ def main(args):
             try:
                 while True:
                     '''
-                        - data_record[2] for segment start time.
-                        - data_record[3] for segment end time.
-                        - segment end time is used instead of start time due to background (index = 0).
+                        - data_record[2] for segment_start_time.
+                        - data_record[3] for segment_end_time.
+                        - segment_end_time is used instead of segment_start_time due to background (index = 0).
                     '''
                     data_record = sess.run(next_element)
                     dataset = dict()
@@ -79,32 +79,32 @@ def main(args):
                     dataset['frame_rgb'] = list(data_record[6])
                     dataset['frame_audio'] = list(data_record[7])
 
-                    raw_segment_start_times_list = list(data_record[3].values)
-                    raw_segment_labels_list = list(data_record[4].values)
-                    raw_segment_scores_list = list(data_record[5].values)
+                    raw_seg_times_list = list(data_record[3].values)
+                    raw_seg_labels_list = list(data_record[4].values)
+                    raw_seg_scores_list = list(data_record[5].values)
 
                     if args.which_challenge == '2nd_challenge':
                         dataset['video_labels'] = list()
-                        video_labels_list = list(data_record[1].values)
-                        for i, video_label in enumerate(video_labels_list):
-                            if video_label in vocab_label2idx_dict:
-                                video_idx = vocab_label2idx_dict[video_label]
-                                dataset['video_labels'].append(video_idx)
+                        vid_labels_list = list(data_record[1].values)
+                        for i, vid_label in enumerate(vid_labels_list):
+                            if vid_label in vocab_label2idx_dict:
+                                vid_idx = vocab_label2idx_dict[vid_label]
+                                dataset['video_labels'].append(vid_idx)
                     else:
-                        for i, segment_label in enumerate(raw_segment_labels_list):
-                            raw_segment_labels_list[i] = vocab_label2idx_dict[segment_label] 
+                        for i, seg_label in enumerate(raw_seg_labels_list):
+                            raw_seg_labels_list[i] = vocab_label2idx_dict[seg_label] 
 
-                        segment_start_times_list = \
-                            [start / 5 for start, score 
-                             in zip(raw_segment_start_times_list, raw_segment_scores_list) if score == 1]
-                        segment_labels_list = \
+                        seg_times_list = \
+                            [time / 5 for time, score 
+                             in zip(raw_seg_times_list, raw_seg_scores_list) if score == 1]
+                        seg_labels_list = \
                             [label for label, score 
-                             in zip(raw_segment_labels_list, raw_segment_scores_list) if score == 1]
-                        video_labels_list = segment_labels_list
+                             in zip(raw_seg_labels_list, raw_seg_scores_list) if score == 1]
+                        vid_labels_list = seg_labels_list
 
-                        dataset['segment_start_times'] = segment_start_times_list
-                        dataset['segment_labels'] = segment_labels_list
-                        dataset['video_labels'] = list(set(video_labels_list))
+                        dataset['segment_times'] = seg_times_list
+                        dataset['segment_labels'] = seg_labels_list
+                        dataset['video_labels'] = list(set(vid_labels_list))
 
                     np.save(output_dir + dataset['video_id'] + '.npy', np.array(dataset))
             except:
