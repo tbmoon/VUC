@@ -4,20 +4,27 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.utils.data as data
-import random
+
 
 class YouTubeDataset(data.Dataset):
 
-    def __init__(self, input_dir,
-                 which_challenge, phase,
-                 max_frame_length=300, max_video_length=1,
-                 rgb_feature_size=1024, audio_feature_size=128,
+    def __init__(self,
+                 input_dir,
+                 which_challenge,
+                 phase,
+                 max_frame_length=300,
+                 max_vid_label_length=5,
+                 max_seg_label_length=15,
+                 rgb_feature_size=1024,
+                 audio_feature_size=128,
                  num_classes=1001):
         self.input_dir = input_dir + which_challenge + \
             '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
         self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
+        self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
-        self.max_video_length = max_video_length
+        self.max_vid_label_length = max_vid_label_length
+        self.max_seg_label_length = max_seg_label_length
         self.rgb_feature_size = rgb_feature_size
         self.audio_feature_size = audio_feature_size
         self.num_classes = num_classes
@@ -29,10 +36,19 @@ class YouTubeDataset(data.Dataset):
         frame_audio = torch.Tensor(data['frame_audio'][:self.max_frame_length])
 
         if self.load_labels == True:
-            video_label = random.sample(data['video_labels'], len(data['video_labels']))
-            video_label = torch.tensor(video_label)
+            vid_label = torch.tensor(data['video_labels'])
+            if self.which_challenge == '3rd_challenge':
+                seg_label = torch.tensor(data['segment_labels'])
+                seg_time = torch.tensor(data['segment_times'])
 
-        return (frame_rgb, frame_audio, video_label, self.max_frame_length, self.max_video_length)
+        return (frame_rgb,
+                frame_audio,
+                vid_label,
+                seg_label,
+                seg_time,
+                self.max_frame_length,
+                self.max_vid_label_length,
+                self.max_seg_label_length)
 
     def __len__(self):
         return len(self.df)
@@ -41,48 +57,66 @@ class YouTubeDataset(data.Dataset):
 def collate_fn(data):
     """
     Create mini-batch tensors from the list of tuples.
-    tuple = (frame_rgb, frame_audio, video_label, max_frame_length, max_video_length).
+    tuple = (frame_rgb, frame_audio, 
+             vid_label, seg_label, seg_time,
+             max_frame_length, max_vid_label_length, max_seg_label_length).
 
     We should build custom collate_fn rather than using default collate_fn,
-    because merging frame_rgb, frame_audio and video_label (including padding) is not supported in default.
+    because merging frame_rgb, frame_audio, vid_label, seg_label, seg_time
+    (including padding) is not supported in default.
 
     Args:
-    data: list of tuple (frame_rgb, frame_audio, video_label, max_frame_length, max_video_length).
+    data: list of tuple (frame_rgb, frame_audio,
+                         vid_label, seg_label, seg_time,
+                         max_frame_length, max_vid_label_length, max_seg_label_length).
         - frame_rgb: torch tensor of shape (variable_length, rgb_feature_size=1024).
         - frame_audio: torch tensor of shape (variable_length, audio_feature_size=128).
-        - video_label: torch tensor of shape (variable_length).
+        - vid_label: torch tensor of shape (variable_length).
+        - seg_label: torch tensor of shape (variable_length).
+        - seg_time: torch tensor of shape (variable_length).
         - max_frame_length: torch tensor of shape (1).
-        - max_video_length: torch tensor of shape (1).
+        - max_vid_label_length: torch tensor of shape (1).
+        - max_seg_label_length: torch tensor of shape (1).
 
     Returns:
+        - frame_lengths: torch tensor of shape (batch_size).
         - padded_frame_rgbs: torch tensor of shape (batch_size, max_frame_length, rgb_feature_size=1024).
         - padded_frame_audios: torch tensor of shape (batch_size, max_frame_length, audio_feature_size=128).
-        - padded_video_labels: torch tensor of shape (batch_size, max_video_length + 1).
+        - padded_vid_labels: torch tensor of shape (batch_size, max_vid_label_length).
+        - padded_seg_labels: torch tensor of shape (batch_size, max_seg_label_length).
+        - padded_seg_times: torch tensor of shape (batch_size, max_seg_label_length).
     """
 
-    # Sort a data list by video_label length (descending order).
+    # Sort a data list by vid_label length (descending order).
     data.sort(key=lambda x: len(x[2]), reverse=True)
-    
-    # frame_rgbs:   tuple of frame_rgb
-    # frame_audios: tuple of frame_audio
-    # video_labels: tuple of video_label
-    # max_frame_lengths: tuple of max_frame_length
-    # max_video_lengths: tuple of max_video_length
-    frame_rgbs, frame_audios, video_labels, max_frame_lengths, max_video_lengths = zip(*data)
+
+    # frame_rgbs: tuple of frame_rgb.
+    # frame_audios: tuple of frame_audio.
+    # vid_labels: tuple of vid_label.
+    # seg_labels: tuple of seg_label.
+    # seg_times: tuple of seg_time.
+    # max_frame_lengths: tuple of max_frame_length.
+    # max_vid_label_lengths: tuple of max_vid_label_length.
+    # max_seg_label_lengths: tuple of max_seg_label_length.
+    frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times, max_frame_lengths, max_vid_label_lengths, max_seg_label_lengths = zip(*data)
 
     batch_size = len(frame_rgbs)
     max_frame_len = max_frame_lengths[0]
-    max_video_len = max_video_lengths[0]
+    max_vid_label_len = max_vid_label_lengths[0]
+    max_seg_label_len = max_seg_label_lengths[0]
     frame_lengths = [len(frame_rgb) for frame_rgb in frame_rgbs]
-    video_lengths = [len(video_label) for video_label in video_labels]
+    vid_label_lengths = [len(vid_label) for vid_label in vid_labels]
+    seg_label_lengths = [len(seg_label) for seg_label in seg_labels]
     rgb_feature_size = frame_rgbs[0].size(1)
     audio_feature_size = frame_audios[0].size(1)
 
     padded_frame_rgbs = torch.zeros(batch_size, max_frame_len, rgb_feature_size)
     padded_frame_audios = torch.zeros(batch_size, max_frame_len, audio_feature_size)
-    padded_video_labels = torch.zeros((batch_size, max_video_len), dtype=torch.int64)
+    padded_vid_labels = torch.zeros((batch_size, max_vid_label_len), dtype=torch.int64)
+    padded_seg_labels = torch.zeros((batch_size, max_seg_label_len), dtype=torch.int64)
+    padded_seg_times = torch.zeros((batch_size, max_seg_label_len), dtype=torch.int64)
 
-    # Merge frame_rgbs, frame_audios, video_labels in a mini-batch
+    # Merge frame_rgbs, frame_audios, vid_labels, seg_labels and seg_times in a mini-batch.
     for i, frame_rgb in enumerate(frame_rgbs):
         end = frame_lengths[i]
         padded_frame_rgbs[i, :end] = frame_rgb
@@ -91,11 +125,21 @@ def collate_fn(data):
         end = frame_lengths[i]
         padded_frame_audios[i, :end] = frame_audio
         
-    for i, video_label in enumerate(video_labels):
-        end = video_lengths[i]
-        padded_video_labels[i, :end] = video_label
+    for i, vid_label in enumerate(vid_labels):
+        end = vid_label_lengths[i]
+        padded_vid_labels[i, :end] = vid_label
+        
+    for i, seg_label in enumerate(seg_labels):
+        end = seg_label_lengths[i]
+        padded_seg_labels[i, :end] = seg_label
+        
+    for i, seg_time in enumerate(seg_times):
+        end = seg_label_lengths[i]
+        padded_seg_times[i, :end] = seg_time
+        
+    frame_lengths = torch.LongTensor(frame_lengths)
 
-    return padded_frame_rgbs, padded_frame_audios, padded_video_labels
+    return frame_lengths, padded_frame_rgbs, padded_frame_audios, padded_vid_labels, padded_seg_labels, padded_seg_times
 
 
 def get_dataloader(
@@ -103,7 +147,8 @@ def get_dataloader(
     which_challenge,
     phases,
     max_frame_length,
-    max_video_length,
+    max_vid_label_length,
+    max_seg_label_length,
     rgb_feature_size,
     audio_feature_size,
     num_classes,
@@ -116,7 +161,8 @@ def get_dataloader(
             which_challenge=which_challenge,
             phase=phase,
             max_frame_length=max_frame_length,
-            max_video_length=max_video_length,
+            max_vid_label_length=max_vid_label_length,
+            max_seg_label_length=max_seg_label_length,
             rgb_feature_size=rgb_feature_size,
             audio_feature_size=audio_feature_size,
             num_classes=num_classes)
