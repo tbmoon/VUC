@@ -37,6 +37,8 @@ class YouTubeDataset(data.Dataset):
 
         if self.load_labels == True:
             vid_label = torch.tensor(data['video_labels'])
+            seg_label = torch.LongTensor([0])
+            seg_time = torch.LongTensor([0])
             if self.which_challenge == '3rd_challenge':
                 seg_label = torch.tensor(data['segment_labels'])
                 seg_time = torch.tensor(data['segment_times'])
