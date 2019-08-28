@@ -40,7 +40,6 @@ for data_type in data_types:
         frame_rgb_len = len(data['frame_rgb'])
         frame_audio_len = len(data['frame_audio'])
         vid_label_len = len(data['video_labels'])
-        seg_label_len = len(data['segment_labels'])
         if (frame_rgb_len != frame_audio_len):
             print('(ERROR) - check if frame length is correct or not!')
             break
@@ -52,6 +51,7 @@ for data_type in data_types:
                 if max_vid_label_len < vid_label_len:
                     max_vid_label_len = vid_label_len
         else:
+            seg_label_len = len(data['segment_labels'])
             assert(data_type == 'valid' or data_type == 'test')
             if (data_type == 'valid'):
                 max_seg_start_times = 0 if vid_label_len == 0 else max(data['segment_times'] * 5)
