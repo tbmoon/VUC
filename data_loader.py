@@ -21,6 +21,7 @@ class YouTubeDataset(data.Dataset):
         self.input_dir = input_dir + which_challenge + \
             '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
         self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
+        self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
         self.max_vid_label_length = max_vid_label_length
@@ -34,6 +35,11 @@ class YouTubeDataset(data.Dataset):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
         frame_rgb = torch.Tensor(data['frame_rgb'][:self.max_frame_length])
         frame_audio = torch.Tensor(data['frame_audio'][:self.max_frame_length])
+        
+        # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
+        offset = 4./512
+        frame_rgb = frame_rgb - offset
+        frame_rgb = frame_rgb * torch.from_numpy(self.pca)
 
         if self.load_labels == True:
             vid_label = torch.tensor(data['video_labels'])

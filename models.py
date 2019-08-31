@@ -226,9 +226,6 @@ class TransformerEncoder(nn.Module):
         outputs:
             - seq_features: [batch_size, seq_length, d_model]
         '''
-        padded_frame_rgbs = padded_frame_rgbs / 255.
-        padded_frame_audios = padded_frame_audios / 255.
-
         # frame_features: [batch_size, frame_length, feature_size]
         frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
 
