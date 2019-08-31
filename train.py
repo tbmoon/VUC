@@ -316,11 +316,12 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame. (128)')
 
-    parser.add_argument('--d_model', type=int, default=64,
-                        help='d_model for feature projection. (64)')
+    parser.add_argument('--d_model', type=int, default=128,
+                        help='d_model for feature projection. \
+                              512 for paper. (64)')
 
-    parser.add_argument('--d_ff', type=int, default=128,
-                        help='d_ff. (128)')
+    parser.add_argument('--d_ff', type=int, default=256,
+                        help='d_ff. 2048 for paper. (128)')
 
     parser.add_argument('--num_classes', type=int, default=1001,
                         help='the number of classes. (1000+1) / (3862+1)')
