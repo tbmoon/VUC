@@ -258,10 +258,15 @@ class Attn(nn.Module):
     def __init__(self, hidden_size):
         super(Attn, self).__init__()
         self.hidden_size = hidden_size
+        self.attn = nn.Linear(hidden_size, hidden_size)
         self.sigmoid = nn.Sigmoid()
 
     def dot_score(self, hidden, encoder_outputs):
         return torch.sum(hidden * encoder_outputs, dim=2)
+
+    def general_score(self, hidden, encoder_outputs):
+        energy = self.attn(encoder_outputs)
+        return torch.sum(hidden * energy, dim=2)
 
     def forward(self, decoder_output, encoder_outputs):
         '''        
@@ -272,15 +277,18 @@ class Attn(nn.Module):
             - raw_attn_weights: [batch_size, seq_length]
             - norm_attn_weights: [batch_size, 1, seq_length]
         '''
-        attn_energies = self.dot_score(decoder_output, encoder_outputs)  # attn_energies: [batch_size, seq_length]        
-        raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
+        # attn_energies: [batch_size, seq_length]
+        #attn_energies = self.dot_score(decoder_output, encoder_outputs) 
+        attn_energies = self.general_score(decoder_output, encoder_outputs)
+
+        raw_attn_weights = self.sigmoid(attn_energies + attn_shift)      # raw_attn_weights: [batch_size, seq_length]
 
         # 1) normalized by attention size.
-        #attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True)        
-        #norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
+        attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True) + 1e-6        
+        norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
 
         # 2) normalized by softmax function.
-        norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
+        #norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
 
         norm_attn_weights = norm_attn_weights.unsqueeze(1)               # norm_attn_weights: [batch_size, 1, seq_length]
 
