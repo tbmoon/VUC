@@ -265,11 +265,11 @@ class Attn(nn.Module):
         raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
         
         # 1) normalized by attention size.
-        attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True)        
-        norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
+        #attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True)        
+        #norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
         
         # 2) normalized by softmax function.
-        #norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
+        norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
         
         norm_attn_weights = norm_attn_weights.unsqueeze(1)               # norm_attn_weights: [batch_size, 1, seq_length]
 
@@ -280,14 +280,14 @@ class RNNDecoder(nn.Module):
     '''
     Implement decoder based on the RNN family.
     '''
-    def __init__(self, d_model, d_ff, num_classes, dropout=0.1):
+    def __init__(self, d_model, d_linear, num_classes, dropout=0.1):
         super(RNNDecoder, self).__init__()
         self.d_model = d_model
         self.dropout = nn.Dropout(dropout)
         self.gru = nn.GRU(d_model, d_model)
         self.attn = Attn(d_model)
-        self.fc_layer1 = nn.Linear(2 * d_model, d_ff)
-        self.fc_layer2 = nn.Linear(d_ff, num_classes)
+        self.fc_layer1 = nn.Linear(2 * d_model, d_linear)
+        self.fc_layer2 = nn.Linear(d_linear, num_classes)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, decoder_input, decoder_hidden, encoder_outputs):
@@ -319,7 +319,7 @@ class RNNDecoder(nn.Module):
         context = context.squeeze(1)                                 # context: [batch_size, d_model]
 
         fc_layer1_input = torch.cat((decoder_output, context), 1)    # fc_layer1_input: [batch_size, 2 * d_model]
-        fc_layer1_output = F.relu(self.fc_layer1(fc_layer1_input))   # fc_layer1_output: [batch_size, d_ff]
+        fc_layer1_output = F.relu(self.fc_layer1(fc_layer1_input))   # fc_layer1_output: [batch_size, d_linear]
 
         fc_layer2_output = self.fc_layer2(fc_layer1_output)          # fc_layer2_output: [batch_size, num_classes]        
         #fc_layer2_output = F.softmax(fc_layer2_output, dim=1)
