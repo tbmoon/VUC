@@ -194,7 +194,7 @@ def main(args):
                     seq_features = encoder(frame_rgbs, frame_audios)
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
 
-                    for itarget in range(args.num_video_label_pred):
+                    for itarget in range(args.num_vid_label_pred):
                         raw_attn_weights, decoder_input, decoder_hidden, vid_logit = \
                             decoder(decoder_input, decoder_hidden, seq_features)
 
@@ -287,7 +287,7 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--load_model', type=bool, default=True,
+    parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=20,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
@@ -346,7 +346,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_vid_label_pred', type=int, default=4,
                         help='the number of video predictions.')
 
-    parser.add_argument('--num_epochs', type=int, default=100,
+    parser.add_argument('--num_epochs', type=int, default=200,
                         help='the number of epochs. (100)')
 
     parser.add_argument('--batch_size', type=int, default=64,
