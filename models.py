@@ -281,7 +281,7 @@ class Attn(nn.Module):
         #attn_energies = self.dot_score(decoder_output, encoder_outputs) 
         attn_energies = self.general_score(decoder_output, encoder_outputs)
 
-        raw_attn_weights = self.sigmoid(attn_energies + attn_shift)      # raw_attn_weights: [batch_size, seq_length]
+        raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
 
         # 1) normalized by attention size.
         attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True) + 1e-6        
