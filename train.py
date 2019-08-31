@@ -128,7 +128,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-pretrained.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-epoch-all.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
@@ -194,7 +194,7 @@ def main(args):
                     seq_features = encoder(frame_rgbs, frame_audios)
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
 
-                    for itarget in range(args.max_vid_label_length):
+                    for itarget in range(args.num_video_label_pred):
                         raw_attn_weights, decoder_input, decoder_hidden, vid_logit = \
                             decoder(decoder_input, decoder_hidden, seq_features)
 
@@ -202,31 +202,30 @@ def main(args):
                         vid_logit = vid_logit[:, 1:]
                         _, vid_pred = torch.max(vid_logit, dim=1)
                         vid_pred = vid_pred + 1
-
-                        _, time_pred = torch.max(raw_attn_weights, dim=1)
-                        time_pred = time_pred + 1
-                        
                         v_loss, vid_labels, selected_vid_label = \
                             cross_entropy_loss_with_vid_label_processing(vid_logit, vid_labels)
 
-                        t_loss, t_label_size = \
-                            binary_cross_entropy_loss_with_seg_label_processing(frame_lengths,
-                                                                                selected_vid_label,
-                                                                                raw_attn_weights,
-                                                                                seg_labels,
-                                                                                seg_times)
-
+                        if args.which_challenge == '3rd_challenge':
+                            _, time_pred = torch.max(raw_attn_weights, dim=1)
+                            time_pred = time_pred + 1
+                            t_loss, t_label_size = \
+                                binary_cross_entropy_loss_with_seg_label_processing(frame_lengths,
+                                                                                    selected_vid_label,
+                                                                                    raw_attn_weights,
+                                                                                    seg_labels,
+                                                                                    seg_times)
                         vid_loss += v_loss
-                        time_loss += args.lambda_factor * t_loss
-                        time_label_size += t_label_size
-
                         zeros = torch.zeros(batch_size, dtype=torch.long).to(device)
                         mask = 1 - torch.eq(selected_vid_label, zeros)
                         vid_correct = torch.eq(selected_vid_label, vid_pred)
                         vid_correct = vid_correct.masked_select(mask)
                         vid_corrects += torch.sum(vid_correct)
+                        total_loss = vid_loss / vid_label_size
 
-                    total_loss = vid_loss / vid_label_size + time_loss / time_label_size
+                        if args.which_challenge == '3rd_challenge':
+                            time_loss += args.lambda_factor * t_loss
+                            time_label_size += t_label_size
+                            total_loss = vid_loss / vid_label_size + time_loss / time_label_size
 
                     if phase == 'train':
                         total_loss.backward()
@@ -236,15 +235,20 @@ def main(args):
                         decoder_optimizer.step()
 
                 running_vid_loss += vid_loss.item()
-                running_time_loss += time_loss.item()
                 running_vid_label_size += vid_label_size.item()
-                running_time_label_size += time_label_size.item()
                 running_vid_corrects += vid_corrects.item()
+                if args.which_challenge == '3rd_challenge':
+                    running_time_label_size += time_label_size.item()
+                    running_time_loss += time_loss.item()
 
             epoch_vid_loss = running_vid_loss / running_vid_label_size
-            epoch_time_loss = running_time_loss / running_time_label_size
-            epoch_total_loss = epoch_vid_loss + epoch_time_loss
             epoch_vid_acc = float(running_vid_corrects) / running_vid_label_size
+            epoch_time_loss = 0.0
+            epoch_total_loss = epoch_vid_loss
+
+            if args.which_challenge == '3rd_challenge':
+                epoch_time_loss = running_time_loss / running_time_label_size
+                epoch_total_loss = epoch_vid_loss + epoch_time_loss
 
             print('| {} SET | Epoch [{:02d}/{:02d}], Total Loss: {:.4f}, Video Loss: {:.4f}, Time Loss: {:.4f}, Video Acc: {:.4f}' \
                   .format(phase.upper(), epoch+1, args.num_epochs, \
@@ -280,7 +284,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default='./models',
                         help='directory for saved models.')
 
-    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
+    parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
     parser.add_argument('--load_model', type=bool, default=True,
@@ -292,10 +296,10 @@ if __name__ == '__main__':
     parser.add_argument('--max_seg_length', type=int, default=60,
                         help='the maximum length of segment step. (60)')
 
-    parser.add_argument('--max_vid_label_length', type=int, default=5,
+    parser.add_argument('--max_vid_label_length', type=int, default=18,
                         help='the maximum length of video label in 2nd challenge: 18. \
                               the maximum length of video label in 3rd challenge: 4. \
-                              (18) / (5)')
+                              (18) / (4)')
 
     parser.add_argument('--max_seg_label_length', type=int, default=15,
                         help='the maximum length of segment label for 3rd challenge. (15)')
@@ -338,6 +342,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
+
+    parser.add_argument('--num_vid_label_pred', type=int, default=4,
+                        help='the number of video predictions.')
 
     parser.add_argument('--num_epochs', type=int, default=100,
                         help='the number of epochs. (100)')
