@@ -206,11 +206,16 @@ class TransformerEncoder(nn.Module):
     '''
     Implement model based on the transformer.
     '''
-    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_model, d_ff, dropout):
+    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_rgb, d_audio, d_model, d_ff, dropout):
         super(TransformerEncoder, self).__init__()
         c = copy.deepcopy
         self.d_model = d_model
-        self.embedding = Embedding(rgb_feature_size, audio_feature_size, d_model)
+        self.rgb_dense = nn.Linear(rgb_feature_size, d_rgb)
+        self.audio_dense = nn.Linear(audio_feature_size, d_audio)
+        self.rgb_dense_bn = nn.BatchNorm1d(d_rgb)
+        self.audio_dense_bn = nn.BatchNorm1d(d_audio)
+        self.dropout = nn.Dropout(dropout)
+        self.embedding = Embedding(d_rgb, d_audio, d_model)
         self.position = PositionalEncoding(d_model, dropout)
         self.attn = MultiHeadedAttention(n_heads, d_model)
         self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
@@ -227,6 +232,12 @@ class TransformerEncoder(nn.Module):
             - seq_features: [batch_size, seq_length, d_model]
         '''
         # frame_features: [batch_size, frame_length, feature_size]
+        padded_frame_rgbs = self.rgb_dense(padded_frame_rgbs).transpose(1, 2)
+        padded_frame_rgbs = self.dropout(F.relu(self.rgb_dense_bn(padded_frame_rgbs).transpose(1, 2)))
+        
+        padded_frame_audios = self.audio_dense(padded_frame_audios).transpose(1, 2)
+        padded_frame_audios = self.dropout(F.relu(self.audio_dense_bn(padded_frame_audios).transpose(1, 2)))
+
         frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
 
         frame_features = self.embedding(frame_features)  # frame_features: [batch_size, frame_length, d_model]
