@@ -231,13 +231,13 @@ class TransformerEncoder(nn.Module):
         outputs:
             - seq_features: [batch_size, seq_length, d_model]
         '''
-        # frame_features: [batch_size, frame_length, feature_size]
         padded_frame_rgbs = self.rgb_dense(padded_frame_rgbs).transpose(1, 2)
         padded_frame_rgbs = self.dropout(F.relu(self.rgb_dense_bn(padded_frame_rgbs).transpose(1, 2)))
-        
+
         padded_frame_audios = self.audio_dense(padded_frame_audios).transpose(1, 2)
         padded_frame_audios = self.dropout(F.relu(self.audio_dense_bn(padded_frame_audios).transpose(1, 2)))
 
+        # frame_features: [batch_size, frame_length, d_rgb + d_audio]
         frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
 
         frame_features = self.embedding(frame_features)  # frame_features: [batch_size, frame_length, d_model]
@@ -274,14 +274,14 @@ class Attn(nn.Module):
         '''
         attn_energies = self.dot_score(decoder_output, encoder_outputs)  # attn_energies: [batch_size, seq_length]        
         raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
-        
+
         # 1) normalized by attention size.
         #attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True)        
         #norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
-        
+
         # 2) normalized by softmax function.
         norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
-        
+
         norm_attn_weights = norm_attn_weights.unsqueeze(1)               # norm_attn_weights: [batch_size, 1, seq_length]
 
         return raw_attn_weights, norm_attn_weights
