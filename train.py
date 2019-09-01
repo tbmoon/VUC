@@ -130,7 +130,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-all.ckpt')
+        checkpoint = torch.load(args.model_dir + '/model-epoch-pretrained.ckpt')
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
@@ -260,12 +260,12 @@ def main(args):
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
                 f.write(str(epoch+1) + '\t' + str(epoch_vid_loss) + '\t' + str(epoch_vid_acc))
 
-        # Save the model check points.
-        if (epoch+1) % args.save_step == 0:
-            torch.save({'epoch': epoch+1,
-                        'encoder_state_dict': encoder.state_dict(),
-                        'decoder_state_dict': decoder.state_dict()},
-                       os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
+            # Save the model check points.
+            if phase == 'train' and (epoch+1) % args.save_step == 0:
+                torch.save({'epoch': epoch+1,
+                            'encoder_state_dict': encoder.state_dict(),
+                            'decoder_state_dict': decoder.state_dict()},
+                           os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
         time_elapsed = time.time() - since
         print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
               .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
