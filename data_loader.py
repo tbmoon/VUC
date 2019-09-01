@@ -42,7 +42,8 @@ class YouTubeDataset(data.Dataset):
         frame_rgb = frame_rgb * torch.from_numpy(self.pca)
 
         if self.load_labels == True:
-            vid_label = torch.tensor(data['video_labels'])
+            vid_label = random.sample(data['video_labels'], len(data['video_labels']))
+            vid_label = torch.tensor(vid_label)
             seg_label = torch.LongTensor([0])
             seg_time = torch.LongTensor([0])
             if self.which_challenge == '3rd_challenge':
