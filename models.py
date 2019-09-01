@@ -221,8 +221,8 @@ class TransformerEncoder(nn.Module):
         self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
         self.encoder = Encoder(self.encoder_layer, n_layers)
-        self.avgpool1d = nn.AvgPool1d(kernel_size=7, stride=5, padding=1)
-        self.maxpool1d = nn.MaxPool1d(kernel_size=7, stride=5, padding=1)
+        self.avgpool1d = nn.AvgPool1d(kernel_size=5, stride=5, padding=0)
+        self.maxpool1d = nn.MaxPool1d(kernel_size=5, stride=5, padding=0)
 
     def forward(self, padded_frame_rgbs, padded_frame_audios):
         '''
