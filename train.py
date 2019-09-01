@@ -289,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--load_model', type=bool, default=False,
+    parser.add_argument('--load_model', type=bool, default=True,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -355,8 +355,8 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
 
-    parser.add_argument('--num_vid_label_pred', type=int, default=4,
-                        help='the number of video predictions.')
+    parser.add_argument('--num_vid_label_pred', type=int, default=18,
+                        help='the number of video predictions. (18) / (4)')
 
     parser.add_argument('--num_epochs', type=int, default=200,
                         help='the number of epochs. (100)')
