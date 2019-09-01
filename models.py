@@ -285,11 +285,11 @@ class Attn(nn.Module):
         raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
 
         # 1) normalized by attention size.
-        attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True) + 1e-6        
-        norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
+        #attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True) + 1e-6        
+        #norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
 
         # 2) normalized by softmax function.
-        #norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
+        norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
 
         norm_attn_weights = norm_attn_weights.unsqueeze(1)               # norm_attn_weights: [batch_size, 1, seq_length]
 
