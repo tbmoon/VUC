@@ -246,7 +246,7 @@ class TransformerEncoder(nn.Module):
         frame_features = self.encoder(frame_features)
 
         frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, d_model, frame_length]
-        seq_features = self.maxpool1d(frame_features)    # seq_features: [batch_size, d_model, seq_length=60]
+        seq_features = self.avgpool1d(frame_features)    # seq_features: [batch_size, d_model, seq_length=60]
         seq_features = seq_features.transpose(1, 2)      # seq_features: [batch_size, seq_length=60, d_model]
 
         return seq_features
