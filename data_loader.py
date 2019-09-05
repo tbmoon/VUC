@@ -33,8 +33,8 @@ class YouTubeDataset(data.Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        frame_rgb = torch.Tensor(data['frame_rgb'][:self.max_frame_length])
-        frame_audio = torch.Tensor(data['frame_audio'][:self.max_frame_length])
+        frame_rgb = torch.from_numpy(np.array(data['frame_rgb'][:self.max_frame_length])).float()
+        frame_audio = torch.from_numpy(np.array(data['frame_audio'][:self.max_frame_length])).float()
         
         # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
         offset = 4./512
