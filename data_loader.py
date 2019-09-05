@@ -43,12 +43,12 @@ class YouTubeDataset(data.Dataset):
 
         if self.load_labels == True:
             vid_label = random.sample(data['video_labels'], len(data['video_labels']))
-            vid_label = torch.tensor(vid_label)
+            vid_label = torch.from_numpy(np.array(vid_label))
             seg_label = torch.LongTensor([0])
             seg_time = torch.LongTensor([0])
             if self.which_challenge == '3rd_challenge':
-                seg_label = torch.tensor(data['segment_labels'])
-                seg_time = torch.tensor(data['segment_times'])
+                seg_label = torch.from_numpy(np.array(data['segment_labels']))
+                seg_time = torch.from_numpy(np.array(data['segment_times']))
 
         return (frame_rgb,
                 frame_audio,
