@@ -53,7 +53,7 @@ def cross_entropy_loss_with_vid_label_processing(logit, labels):
     selected_loss, _ = torch.max(selected_loss, dim=1)
     unselected_loss = unselected_loss.sum(dim=1) / (unselected_labels.float().ge(0.5).sum(dim=1).float() + eps)
 
-    exist_selected_label = selected_labels.float().sum(dim=1).ge(0.5)
+    exist_selected_label = selected_labels.sum(dim=1).float().ge(0.5)
 
     loss = torch.where(exist_selected_label == torch.ones(1).byte().to(device), selected_loss, unselected_loss)
     loss = loss.masked_select(exist_label).sum()
