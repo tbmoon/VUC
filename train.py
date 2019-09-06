@@ -17,48 +17,35 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 def cross_entropy_loss_with_vid_label_processing(logit, labels):
     '''
     inputs:
-        - logit: [batch_size, num_classes]
+        - logit: [batch_size, num_classes - 1]
         - labels: [batch_size, max_vid_label_length]
     outputs:
-        - vid_correct: [1]
-        - loss_size: [1]
         - loss: [1]
-        - next_labels: [batch_size, max_vid_label_length]
+        - labels: [batch_size, max_vid_label_length]
+        - selected_label: [batch_size]
     '''
-    eps = 1e-9
+    eps = 1e-6
     batch_size = logit.size(0)
     max_vid_label_length = labels.size(1)
-    zeros = torch.zeros(batch_size, max_vid_label_length).to(device)
 
+    # Do NOT include 0-label prediction in softmax calculation.
     prob = F.softmax(logit, dim=1)
-    _, pred = torch.max(prob, dim=1)
+    zero_col = torch.zeros(batch_size, 1).to(device)
+    prob = torch.cat((zero_col, prob), dim=1)
 
-    exist_label = labels.sum(dim=1).float().ge(0.5)
-    loss_size = exist_label.sum().float()
+    # Probability of predicted labels.
+    prob_candidates = torch.gather(prob, 1, labels)
+    selected_prob, selected_label_idx = torch.max(prob_candidates, dim=1)
+    selected_label = labels[range(batch_size), selected_label_idx]
+    mask = selected_label.float().ge(0.5)
 
-    selected_labels = torch.where(labels == pred.view(-1, 1), labels, zeros.long())
-    unselected_labels = torch.where(labels == pred.view(-1, 1), zeros.long(), labels)
-    vid_correct = selected_labels.float().ge(0.5).sum(dim=1).sum()
-    next_labels = unselected_labels
+    zeros = torch.zeros(batch_size, max_vid_label_length).to(device)
+    labels = torch.where(labels == selected_label.view(-1, 1), zeros, labels.float())
+    labels = labels.long()
 
-    selected_probs = torch.gather(prob, 1, selected_labels).float()
-    unselected_probs = torch.gather(prob, 1, unselected_labels).float()
+    loss = -torch.log(selected_prob + eps).masked_select(mask).sum()
 
-    selected_loss = -torch.log(selected_probs + eps)
-    unselected_loss = -torch.log(unselected_probs + eps)
-
-    selected_loss = torch.where(selected_labels == torch.zeros(1).long().to(device), zeros, selected_loss)
-    unselected_loss = torch.where(unselected_labels == torch.zeros(1).long().to(device), zeros, unselected_loss)
-
-    selected_loss, _ = torch.max(selected_loss, dim=1)
-    unselected_loss = unselected_loss.sum(dim=1) / (unselected_labels.float().ge(0.5).sum(dim=1).float() + eps)
-
-    exist_selected_label = selected_labels.sum(dim=1).float().ge(0.5)
-
-    loss = torch.where(exist_selected_label == torch.ones(1).byte().to(device), selected_loss, unselected_loss)
-    loss = loss.masked_select(exist_label).sum()
-
-    return vid_correct, loss_size, loss, next_labels
+    return loss, labels, selected_label
 
 
 def binary_cross_entropy_loss_with_seg_label_processing(frame_lengths, selected_vid_label, prob, seg_labels, seg_times):
@@ -158,14 +145,12 @@ def main(args):
 
     for epoch in range(args.num_epochs):
         since = time.time()
-        
         for phase in ['train', 'valid']:
-            running_vid_corrects = 0
-            running_vid_label_size = 0
-            running_vid_loss_size = 0.0
             running_vid_loss = 0.0
             running_time_loss = 0.0
+            running_vid_label_size = 0
             running_time_label_size = 0
+            running_vid_corrects = 0
 
             if phase == 'train':
                 encoder_scheduler.step()
@@ -195,16 +180,15 @@ def main(args):
                 seg_labels = seg_labels.to(device)
                 seg_times = seg_times.to(device)
                 batch_size = vid_labels.size(0)
-                vid_label_size = vid_labels.float().ge(0.5).sum().float()
+                vid_label_size = vid_labels.float().ge(0.5).sum()
+                time_label_size = 0
 
                 with torch.set_grad_enabled(phase == 'train'):
-                    vid_corrects = 0
-                    vid_loss_size = 0
-                    vid_loss = 0.0
-                    time_corrects = 0
-                    time_label_size = 0
-                    time_loss = 0.0
                     total_loss = 0.0
+                    vid_loss = 0.0
+                    time_loss = 0.0
+                    vid_corrects = 0
+                    time_corrects = 0
 
                     # seq_features: [batch_size, seq_length=60, d_model]
                     # decoder_input: [1, batch_size, d_model]
@@ -216,12 +200,12 @@ def main(args):
                         raw_attn_weights, decoder_input, decoder_hidden, vid_logit = \
                             decoder(decoder_input, decoder_hidden, seq_features)
 
-                        vid_correct, v_loss_size, v_loss, vid_labels = \
+                        # Do NOT include 0-label in softmax calculation and prediction.
+                        vid_logit = vid_logit[:, 1:]
+                        _, vid_pred = torch.max(vid_logit, dim=1)
+                        vid_pred = vid_pred + 1
+                        v_loss, vid_labels, selected_vid_label = \
                             cross_entropy_loss_with_vid_label_processing(vid_logit, vid_labels)
-
-                        vid_corrects += vid_correct
-                        vid_loss_size += v_loss_size
-                        vid_loss += v_loss
 
                         if args.which_challenge == '3rd_challenge':
                             _, time_pred = torch.max(raw_attn_weights, dim=1)
@@ -232,11 +216,18 @@ def main(args):
                                                                                     raw_attn_weights,
                                                                                     seg_labels,
                                                                                     seg_times)
+                        vid_loss += v_loss
+                        zeros = torch.zeros(batch_size, dtype=torch.long).to(device)
+                        mask = 1 - torch.eq(selected_vid_label, zeros)
+                        vid_correct = torch.eq(selected_vid_label, vid_pred)
+                        vid_correct = vid_correct.masked_select(mask)
+                        vid_corrects += torch.sum(vid_correct)
+                        total_loss = vid_loss / vid_label_size
+
+                        if args.which_challenge == '3rd_challenge':
                             time_loss += args.lambda_factor * t_loss
                             time_label_size += t_label_size
-                            total_loss = vid_loss / vid_loss_size + time_loss / time_label_size
-
-                    total_loss = vid_loss / vid_loss_size
+                            total_loss = vid_loss / vid_label_size + time_loss / time_label_size
 
                     if phase == 'train':
                         total_loss.backward()
@@ -245,17 +236,15 @@ def main(args):
                         encoder_optimizer.step()
                         decoder_optimizer.step()
 
-                running_vid_corrects += vid_corrects.item()
-                running_vid_label_size += vid_label_size.item()
-                running_vid_loss_size += vid_loss_size.item()
                 running_vid_loss += vid_loss.item()
-
+                running_vid_label_size += vid_label_size.item()
+                running_vid_corrects += vid_corrects.item()
                 if args.which_challenge == '3rd_challenge':
                     running_time_label_size += time_label_size.item()
                     running_time_loss += time_loss.item()
-                
-            epoch_vid_recall = float(running_vid_corrects) / running_vid_label_size
-            epoch_vid_loss = running_vid_loss / running_vid_loss_size
+
+            epoch_vid_loss = running_vid_loss / running_vid_label_size
+            epoch_vid_acc = float(running_vid_corrects) / running_vid_label_size
             epoch_time_loss = 0.0
             epoch_total_loss = epoch_vid_loss
 
@@ -263,13 +252,13 @@ def main(args):
                 epoch_time_loss = running_time_loss / running_time_label_size
                 epoch_total_loss = epoch_vid_loss + epoch_time_loss
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Total Loss: {:.4f}, Video Loss: {:.4f}, Time Loss: {:.4f}, Video Recall: {:.4f}' \
+            print('| {} SET | Epoch [{:02d}/{:02d}], Total Loss: {:.4f}, Video Loss: {:.4f}, Time Loss: {:.4f}, Video Acc: {:.4f}' \
                   .format(phase.upper(), epoch+1, args.num_epochs, \
-                          epoch_total_loss, epoch_vid_loss, epoch_time_loss, epoch_vid_recall))
+                          epoch_total_loss, epoch_vid_loss, epoch_time_loss, epoch_vid_acc))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
-                f.write(str(epoch+1) + '\t' + str(epoch_vid_loss) + '\t' + str(epoch_vid_recall))
+                f.write(str(epoch+1) + '\t' + str(epoch_vid_loss) + '\t' + str(epoch_vid_acc))
 
             # Save the model check points.
             if phase == 'train' and (epoch+1) % args.save_step == 0:
@@ -300,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--load_model', type=bool, default=False,
+    parser.add_argument('--load_model', type=bool, default=True,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -357,7 +346,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=7,
+    parser.add_argument('--step_size', type=int, default=20,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
@@ -369,7 +358,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_vid_label_pred', type=int, default=18,
                         help='the number of video predictions. (18) / (4)')
 
-    parser.add_argument('--num_epochs', type=int, default=100,
+    parser.add_argument('--num_epochs', type=int, default=200,
                         help='the number of epochs. (100)')
 
     parser.add_argument('--batch_size', type=int, default=64,
