@@ -43,7 +43,8 @@ def cross_entropy_loss_with_vid_label_processing(logit, labels):
     labels = torch.where(labels == selected_label.view(-1, 1), zeros, labels.float())
     labels = labels.long()
 
-    loss = -torch.log(selected_prob + eps).masked_select(mask).sum()
+    loss = -1 * (1-selected_prob)**args.focal_loss_gamma * torch.log(selected_prob + eps)
+    loss = loss.masked_select(mask).sum()
 
     return loss, labels, selected_label
 
@@ -351,6 +352,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay. (0.1)')
+
+    parser.add_argument('--focal_loss_gamma', type=int, default=5,
+                        help='gamma of focal loss. (5)')
 
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
