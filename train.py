@@ -91,6 +91,11 @@ def main(args):
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
 
+    # the maximum length of video label in 2nd challenge: 18.
+    # the maximum length of video label in 3rd challenge: 4.
+    args.max_vid_label_length = 18 if args.which_challenge == '2nd_challenge' else 4
+    args.num_vid_label_pred = 18 if args.which_challenge == '2nd_challenge' else 4
+
     data_loaders, dataset_sizes = get_dataloader(
         input_dir=args.input_dir,
         which_challenge=args.which_challenge,
@@ -299,11 +304,6 @@ if __name__ == '__main__':
     parser.add_argument('--max_seg_length', type=int, default=60,
                         help='the maximum length of segment step. (60)')
 
-    parser.add_argument('--max_vid_label_length', type=int, default=18,
-                        help='the maximum length of video label in 2nd challenge: 18. \
-                              the maximum length of video label in 3rd challenge: 4. \
-                              (18) / (4)')
-
     parser.add_argument('--max_seg_label_length', type=int, default=15,
                         help='the maximum length of segment label for 3rd challenge. (15)')
 
@@ -358,9 +358,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
-
-    parser.add_argument('--num_vid_label_pred', type=int, default=18,
-                        help='the number of video predictions. (18) / (4)')
 
     parser.add_argument('--num_epochs', type=int, default=200,
                         help='the number of epochs. (100)')
