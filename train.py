@@ -213,7 +213,7 @@ def main(args):
                         v_loss, vid_labels, selected_vid_label = \
                             cross_entropy_loss_with_vid_label_processing(vid_logit, vid_labels)
 
-                        if args.which_challenge == '3rd_challenge':
+                        if args.which_challenge == 'xxx_challenge':
                             _, time_pred = torch.max(raw_attn_weights, dim=1)
                             time_pred = time_pred + 1
                             t_loss, t_label_size = \
@@ -230,7 +230,7 @@ def main(args):
                         vid_corrects += torch.sum(vid_correct)
                         total_loss = vid_loss / vid_label_size
 
-                        if args.which_challenge == '3rd_challenge':
+                        if args.which_challenge == 'xxx_challenge':
                             time_loss += args.lambda_factor * t_loss
                             time_label_size += t_label_size
                             total_loss = vid_loss / vid_label_size + time_loss / time_label_size
@@ -245,7 +245,7 @@ def main(args):
                 running_vid_loss += vid_loss.item()
                 running_vid_label_size += vid_label_size.item()
                 running_vid_corrects += vid_corrects.item()
-                if args.which_challenge == '3rd_challenge':
+                if args.which_challenge == 'xxx_challenge':
                     running_time_label_size += time_label_size.item()
                     running_time_loss += time_loss.item()
 
@@ -254,7 +254,7 @@ def main(args):
             epoch_time_loss = 0.0
             epoch_total_loss = epoch_vid_loss
 
-            if args.which_challenge == '3rd_challenge':
+            if args.which_challenge == 'xxx_challenge':
                 epoch_time_loss = running_time_loss / running_time_label_size
                 epoch_total_loss = epoch_vid_loss + epoch_time_loss
 
