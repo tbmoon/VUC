@@ -347,7 +347,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=20,
+    parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
