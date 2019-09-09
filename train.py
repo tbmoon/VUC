@@ -44,6 +44,20 @@ def cross_entropy_loss_with_vid_label_processing(logit, labels):
     labels = labels.long()
 
     loss = -1 * (1-selected_prob)**args.focal_loss_gamma * torch.log(selected_prob + eps)
+
+    #if args.which_challenge == '2nd_challenge':
+    #    batch_prob = torch.rand(batch_size).to(device)
+    #    threshold = np.array([0. for p in range(args.num_classes)])
+    #    threshold[0] = 1.1
+    #    threshold[1] = 0.95
+    #    threshold[2:5] = 0.90
+    #    threshold[5:50] = 0.80
+    #    threshold[50:100] = 0.30
+    #    threshold = torch.tensor(threshold, dtype=torch.float).to(device)
+    #    batch_threshold = torch.gather(threshold, 0, selected_label)
+    #    zeros = torch.zeros(batch_size).byte().to(device)
+    #    mask = torch.where(batch_prob > batch_threshold, mask, zeros)
+
     loss = loss.masked_select(mask).sum()
 
     return loss, labels, selected_label
@@ -228,12 +242,13 @@ def main(args):
                         vid_correct = torch.eq(selected_vid_label, vid_pred)
                         vid_correct = vid_correct.masked_select(mask)
                         vid_corrects += torch.sum(vid_correct)
-                        total_loss = vid_loss / vid_label_size
 
                         if args.which_challenge == 'xxx_challenge':
                             time_loss += args.lambda_factor * t_loss
                             time_label_size += t_label_size
                             total_loss = vid_loss / vid_label_size + time_loss / time_label_size
+
+                    total_loss = vid_loss / vid_label_size
 
                     if phase == 'train':
                         total_loss.backward()
@@ -353,7 +368,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay. (0.1)')
 
-    parser.add_argument('--focal_loss_gamma', type=int, default=5,
+    parser.add_argument('--focal_loss_gamma', type=int, default=0,
                         help='gamma of focal loss. (5)')
 
     parser.add_argument('--lambda_factor', type=float, default=10.,
