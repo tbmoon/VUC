@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
+from center_loss import CenterLoss
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerEncoder, RNNDecoder
 
@@ -143,6 +144,8 @@ def main(args):
     encoder = encoder.to(device)
     decoder = decoder.to(device)
 
+    center_loss = CenterLoss(num_classes=args.num_classes, feat_dim=args.d_model, device=device)
+
     # This was important from their code.
     # Initialize parameters with Glorot / fan_avg.
     for p in encoder.parameters():
@@ -155,7 +158,7 @@ def main(args):
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
     encoder_params = encoder.parameters()
-    decoder_params = decoder.parameters()
+    decoder_params = list(center_loss.parameters()) + list(decoder.parameters())
 
     encoder_optimizer = optim.Adam(encoder_params, lr=args.learning_rate)
     decoder_optimizer = optim.Adam(decoder_params, lr=args.learning_rate)
@@ -167,6 +170,7 @@ def main(args):
         since = time.time()
         for phase in ['train', 'valid']:
             running_vid_loss = 0.0
+            running_vid_cent_loss = 0.0
             running_time_loss = 0.0
             running_vid_label_size = 0
             running_time_label_size = 0
@@ -206,6 +210,7 @@ def main(args):
                 with torch.set_grad_enabled(phase == 'train'):
                     total_loss = 0.0
                     vid_loss = 0.0
+                    vid_cent_loss = 0.0
                     time_loss = 0.0
                     vid_corrects = 0
                     time_corrects = 0
@@ -217,7 +222,7 @@ def main(args):
                     decoder_input, decoder_hidden = decoder.init_input_hidden(batch_size, device)
 
                     for itarget in range(args.num_vid_label_pred):
-                        raw_attn_weights, decoder_input, decoder_hidden, vid_logit = \
+                        raw_attn_weights, decoder_input_next, decoder_hidden, vid_logit = \
                             decoder(decoder_input, decoder_hidden, seq_features)
 
                         # Do NOT include 0-label in softmax calculation and prediction.
@@ -226,7 +231,7 @@ def main(args):
                         vid_pred = vid_pred + 1
                         v_loss, vid_labels, selected_vid_label = \
                             cross_entropy_loss_with_vid_label_processing(vid_logit, vid_labels)
-
+                        
                         if args.which_challenge == 'xxx_challenge':
                             _, time_pred = torch.max(raw_attn_weights, dim=1)
                             time_pred = time_pred + 1
@@ -237,6 +242,9 @@ def main(args):
                                                                                     seg_labels,
                                                                                     seg_times)
                         vid_loss += v_loss
+                        vid_cent_loss += center_loss(decoder_input.squeeze(0), selected_vid_label, device)
+                        
+                        decoder_input = decoder_input_next
                         zeros = torch.zeros(batch_size, dtype=torch.long).to(device)
                         mask = 1 - torch.eq(selected_vid_label, zeros)
                         vid_correct = torch.eq(selected_vid_label, vid_pred)
@@ -248,7 +256,7 @@ def main(args):
                             time_label_size += t_label_size
                             total_loss = vid_loss / vid_label_size + time_loss / time_label_size
 
-                    total_loss = vid_loss / vid_label_size
+                    total_loss = vid_loss / vid_label_size + vid_cent_loss / vid_label_size
 
                     if phase == 'train':
                         total_loss.backward()
@@ -258,6 +266,7 @@ def main(args):
                         decoder_optimizer.step()
 
                 running_vid_loss += vid_loss.item()
+                running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size.item()
                 running_vid_corrects += vid_corrects.item()
                 if args.which_challenge == 'xxx_challenge':
@@ -265,17 +274,18 @@ def main(args):
                     running_time_loss += time_loss.item()
 
             epoch_vid_loss = running_vid_loss / running_vid_label_size
+            epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             epoch_vid_acc = float(running_vid_corrects) / running_vid_label_size
             epoch_time_loss = 0.0
-            epoch_total_loss = epoch_vid_loss
+            epoch_total_loss = epoch_vid_loss + epoch_vid_cent_loss
 
             if args.which_challenge == 'xxx_challenge':
                 epoch_time_loss = running_time_loss / running_time_label_size
                 epoch_total_loss = epoch_vid_loss + epoch_time_loss
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Total Loss: {:.4f}, Video Loss: {:.4f}, Time Loss: {:.4f}, Video Acc: {:.4f}' \
+            print('| {} SET | Epoch [{:02d}/{:02d}], Total Loss: {:.4f}, Video Loss: {:.4f}, Cent Loss: {:.4f}, Video Acc: {:.4f}' \
                   .format(phase.upper(), epoch+1, args.num_epochs, \
-                          epoch_total_loss, epoch_vid_loss, epoch_time_loss, epoch_vid_acc))
+                          epoch_total_loss, epoch_vid_loss, epoch_vid_cent_loss, epoch_vid_acc))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
