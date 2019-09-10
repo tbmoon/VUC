@@ -320,7 +320,7 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--load_model', type=bool, default=True,
+    parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -332,10 +332,10 @@ if __name__ == '__main__':
     parser.add_argument('--max_seg_label_length', type=int, default=15,
                         help='the maximum length of segment label for 3rd challenge. (15)')
 
-    parser.add_argument('--n_layers', type=int, default=6,
+    parser.add_argument('--n_layers', type=int, default=2,
                         help='n_layers for the encoder. (6)')
 
-    parser.add_argument('--n_heads', type=int, default=8,
+    parser.add_argument('--n_heads', type=int, default=4,
                         help='n_heads for the attention. (8)')
 
     parser.add_argument('--rgb_feature_size', type=int, default=1024,
@@ -350,14 +350,14 @@ if __name__ == '__main__':
     parser.add_argument('--d_audio', type=int, default=256,
                         help='mapping audio size. (256)')
     
-    parser.add_argument('--d_model', type=int, default=256,
+    parser.add_argument('--d_model', type=int, default=128,
                         help='d_model for feature projection. \
                               512 for paper. (256)')
 
-    parser.add_argument('--d_ff', type=int, default=1024,
+    parser.add_argument('--d_ff', type=int, default=256,
                         help='d_ff. 2048 for paper. (1024)')
 
-    parser.add_argument('--d_linear', type=int, default=2048,
+    parser.add_argument('--d_linear', type=int, default=512,
                         help='d_linear. (2048)')
 
     parser.add_argument('--num_classes', type=int, default=1001,
@@ -372,7 +372,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=3,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
@@ -384,10 +384,10 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
 
-    parser.add_argument('--num_epochs', type=int, default=200,
+    parser.add_argument('--num_epochs', type=int, default=20,
                         help='the number of epochs. (100)')
 
-    parser.add_argument('--batch_size', type=int, default=64,
+    parser.add_argument('--batch_size', type=int, default=128,
                         help='batch_size. (64) / (256)')
 
     parser.add_argument('--num_workers', type=int, default=16,
