@@ -109,7 +109,7 @@ def main(args):
     # the maximum length of video label in 2nd challenge: 18.
     # the maximum length of video label in 3rd challenge: 4.
     args.max_vid_label_length = 18 if args.which_challenge == '2nd_challenge' else 4
-    args.num_vid_label_pred = 18 if args.which_challenge == '2nd_challenge' else 4
+    args.num_vid_label_pred = 8 if args.which_challenge == '2nd_challenge' else 4
 
     data_loaders, dataset_sizes = get_dataloader(
         input_dir=args.input_dir,
@@ -387,7 +387,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=20,
                         help='the number of epochs. (100)')
 
-    parser.add_argument('--batch_size', type=int, default=128,
+    parser.add_argument('--batch_size', type=int, default=256,
                         help='batch_size. (64) / (256)')
 
     parser.add_argument('--num_workers', type=int, default=16,
