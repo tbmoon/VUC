@@ -17,9 +17,9 @@ def attention(query, key, value, dropout=None):
     '''
     Compute 'Scaled Dot Product Attention'.
     '''
-    d_k = query.size(-1)
     # query, key, value: [batch_size, n_heads, frame_length, d_k]
     # scores: [batch_size, n_heads, frame_length, frame_length]
+    d_k = query.size(-1)
     scores = torch.matmul(query, key.transpose(-2, -1)) \
         / math.sqrt(d_k)
     p_attn = F.softmax(scores, dim=-1)
@@ -202,157 +202,138 @@ class Encoder(nn.Module):
         return self.norm(x)
 
 
-class TransformerEncoder(nn.Module):
+class Frame2Segment(nn.Module):
+    '''
+    Translate frame into segment level.
+    '''
+    def __init__(self):
+        super(Frame2Segment, self).__init__()
+        self.avgpool1d = nn.AvgPool1d(kernel_size=5, stride=5, padding=0)
+        self.maxpool1d = nn.MaxPool1d(kernel_size=5, stride=5, padding=0)
+
+    def forward(self, frame_features):
+        '''
+        inputs:
+            - frame_features: [batch_size, frame_length, d_model]
+        outputs:
+            - seg_features: [batch_size, seg_length, d_model]
+        '''
+        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, d_model, frame_length]
+        seg_features = self.avgpool1d(frame_features)    # seg_features: [batch_size, d_model, seg_length=60]
+        seg_features = seg_features.transpose(1, 2)      # seg_features: [batch_size, seg_length=60, d_model]        
+        return seg_features
+
+
+def seg_attention(query, key, value, dropout=None):
+    '''
+    Compute 'Scaled Dot Product Attention'.
+    '''
+    # query, key, value: [batch_size, frame_length, d_proj]
+    # scores: [batch_size, frame_length]
+    # p_attn: [batch_size, frame_length]
+    d_proj = query.size(-1)
+    scores = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
+    p_attn = F.softmax(scores, dim=-1)
+    if dropout is not None:
+        p_attn = dropout(p_attn)
+
+    # weighted_sum: [batch_size, frame_length, d_proj]
+    # p_attn: [batch_size, frame_length]
+    weighted_sum = p_attn.unsqueeze(2) * value
+    return weighted_sum, p_attn
+
+
+class SegmentAttention(nn.Module):
+    def __init__(self, d_model, d_proj, dropout=0.1):
+        '''
+        Take in number of projection size.
+        '''
+        super(SegmentAttention, self).__init__()
+        self.linears = clones(nn.Linear(d_model, d_proj), 3)
+        self.attn = None
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, query, key, value):
+        '''
+        Implement Figure 2.
+        '''
+        batch_size = query.size(0)
+
+        # 1) Do all the linear projections in batch from d_model => d_proj
+        # query, key, value: [batch_size, seg_length, d_model]
+        # query, key, value: [batch_size, seg_length, d_proj]
+        query, key, value = \
+            [l(x) for l, x in zip(self.linears, (query, key, value))]
+
+        # 2) Apply attention on all the projected vectors in batch.
+        x, self.attn = seg_attention(query, key, value, dropout=self.dropout)
+        
+        # 3) Apply element-wise summation w.r.t. seg_length.
+        x = torch.sum(x, dim=1, keepdim=True)  # x: [batch_size, 1, d_proj]
+        return x
+
+
+class Classifier(nn.Module):
+    '''
+    Classify video labels.
+    '''
+    def __init__(self, d_model, d_proj, num_classes, dropout=0.1):
+        super(Classifier, self).__init__()
+        self.seg_attn = SegmentAttention(d_model, d_proj, dropout)
+        self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj)
+        self.dropout = nn.Dropout(p=dropout)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, seg_features, device):
+        '''
+        Calculated by weighted sum using hadamard product.
+        inputs:
+            - seg_features: [batch_size, seg_length, d_model]
+        outputs:
+            - vid_probs: [batch_size, num_classes]
+        '''
+        vid_feature = self.seg_attn(seg_features, seg_features, seg_features)  # vid_feature: [batch_size, 1, d_proj]
+        vid_logits = self.conv1d(self.dropout(F.relu(vid_feature)))            # vid_logits: [batch_size, num_classes, 1]
+        vid_logits = vid_logits.squeeze(2)                                     # vid_logits: [batch_size, num_classes]
+        vid_probs = self.sigmoid(vid_logits)                                   # vid_probs: [batch_size, num_classes]
+        return vid_probs
+
+
+class TransformerModel(nn.Module):
     '''
     Implement model based on the transformer.
     '''
-    def __init__(self, n_layers, n_heads, rgb_feature_size, audio_feature_size, d_rgb, d_audio, d_model, d_ff, dropout):
-        super(TransformerEncoder, self).__init__()
+    def __init__(self, n_layers, n_heads, rgb_feature_size,
+                 audio_feature_size, d_model, d_ff, d_proj, num_classes,
+                 dropout):
+        super(TransformerModel, self).__init__()
         c = copy.deepcopy
         self.d_model = d_model
-        #self.rgb_dense = nn.Linear(rgb_feature_size, d_rgb)
-        #self.audio_dense = nn.Linear(audio_feature_size, d_audio)
-        #self.rgb_dense_bn = nn.BatchNorm1d(d_rgb)
-        #self.audio_dense_bn = nn.BatchNorm1d(d_audio)
-        #self.dropout = nn.Dropout(dropout)
         self.embedding = Embedding(rgb_feature_size, audio_feature_size, d_model)
         self.position = PositionalEncoding(d_model, dropout)
         self.attn = MultiHeadedAttention(n_heads, d_model)
         self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
         self.encoder = Encoder(self.encoder_layer, n_layers)
-        self.avgpool1d = nn.AvgPool1d(kernel_size=5, stride=5, padding=0)
-        self.maxpool1d = nn.MaxPool1d(kernel_size=5, stride=5, padding=0)
+        self.frame2seg = Frame2Segment()
+        self.classifier = Classifier(d_model, d_proj, num_classes, dropout)
 
-    def forward(self, padded_frame_rgbs, padded_frame_audios):
+    def forward(self, padded_frame_rgbs, padded_frame_audios, device):
         '''
         inputs:
             - padded_frame_rgbs: [batch_size, frame_length, rgb_feature_size]
             - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
         outputs:
-            - seq_features: [batch_size, seq_length, d_model]
+            - vid_probs: [batch_size, num_classes]
         '''
-        #padded_frame_rgbs = self.rgb_dense(padded_frame_rgbs).transpose(1, 2)
-        #padded_frame_rgbs = self.dropout(F.relu(self.rgb_dense_bn(padded_frame_rgbs).transpose(1, 2)))
-
-        #padded_frame_audios = self.audio_dense(padded_frame_audios).transpose(1, 2)
-        #padded_frame_audios = self.dropout(F.relu(self.audio_dense_bn(padded_frame_audios).transpose(1, 2)))
-
         padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
         padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
 
-        # frame_features: [batch_size, frame_length, d_rgb + d_audio]
+        # frame_features: [batch_size, frame_length, rgb_feature_size + audio_feature_size]
         frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
-
-        frame_features = self.embedding(frame_features)  # frame_features: [batch_size, frame_length, d_model]
+        frame_features = self.embedding(frame_features)     # frame_features: [batch_size, frame_length, d_model]
         frame_features = self.position(frame_features)
         frame_features = self.encoder(frame_features)
-
-        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, d_model, frame_length]
-        seq_features = self.avgpool1d(frame_features)    # seq_features: [batch_size, d_model, seq_length=60]
-        seq_features = seq_features.transpose(1, 2)      # seq_features: [batch_size, seq_length=60, d_model]
-
-        return seq_features
-
-
-class Attn(nn.Module):
-    '''
-    Implement attention weights based on dot product. 
-    '''
-    def __init__(self, hidden_size):
-        super(Attn, self).__init__()
-        self.hidden_size = hidden_size
-        self.attn = nn.Linear(hidden_size, hidden_size)
-        self.sigmoid = nn.Sigmoid()
-
-    def dot_score(self, hidden, encoder_outputs):
-        return torch.sum(hidden * encoder_outputs, dim=2)
-
-    def general_score(self, hidden, encoder_outputs):
-        energy = self.attn(encoder_outputs)
-        return torch.sum(hidden * energy, dim=2)
-
-    def forward(self, decoder_output, encoder_outputs):
-        '''        
-        inputs:
-            - decoder_output: [batch_size, 1, d_model]
-            - encoder_outputs: [batch_size, seq_length=60, d_model]
-        outputs:
-            - raw_attn_weights: [batch_size, seq_length]
-            - norm_attn_weights: [batch_size, 1, seq_length]
-        '''
-        # attn_energies: [batch_size, seq_length]
-        #attn_energies = self.dot_score(decoder_output, encoder_outputs) 
-        attn_energies = self.general_score(decoder_output, encoder_outputs)
-
-        raw_attn_weights = self.sigmoid(attn_energies)                   # raw_attn_weights: [batch_size, seq_length]
-
-        # 1) normalized by attention size.
-        #attn_sum = torch.sum(raw_attn_weights, dim=1, keepdim=True) + 1e-6        
-        #norm_attn_weights = raw_attn_weights / attn_sum                  # norm_attn_weights: [batch_size, seq_length]
-
-        # 2) normalized by softmax function.
-        norm_attn_weights = F.softmax(attn_energies, dim=1)              # attn_weights: [batch_size, seq_length]
-
-        norm_attn_weights = norm_attn_weights.unsqueeze(1)               # norm_attn_weights: [batch_size, 1, seq_length]
-
-        return raw_attn_weights, norm_attn_weights
-
-
-class RNNDecoder(nn.Module):
-    '''
-    Implement decoder based on the RNN family.
-    '''
-    def __init__(self, d_model, d_linear, num_classes, dropout=0.1):
-        super(RNNDecoder, self).__init__()
-        self.d_model = d_model
-        self.dropout = nn.Dropout(dropout)
-        self.gru = nn.GRU(d_model, d_model)
-        self.attn = Attn(d_model)
-        self.context_bn = nn.BatchNorm1d(d_model)
-        self.fc_layer1 = nn.Linear(2 * d_model, d_linear)
-        self.fc_layer2 = nn.Linear(d_linear, num_classes)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, decoder_input, decoder_hidden, encoder_outputs):
-        '''
-        - We run this one step (class) at a time.
-        - The "contex" and "decoder_output" will be inputed to the next time step of the decoder.
-        
-        inputs:
-            - decoder_intput: [1, batch_size, d_model]
-            - decoder_hidden: [1, batch_size, d_model]
-            - encoder_outputs: [batch_size, seq_lentgh=60, d_model]
-        outputs:
-            - raw_attn_weights: [batch_size, seq_length]
-            - context: [1, batch_size, d_model]
-            - decoder_output: [1, batch_size, d_model]
-            - fc_layer2_output: [batch_size, num_classes]
-        '''
-        decoder_input = self.dropout(decoder_input)
-        decoder_output, _ = self.gru(decoder_input, decoder_hidden)  # decoder_output: [1, batch_size, d_model]
-        decoder_output = decoder_output.transpose(0, 1)              # decoder_output: [batch_size, 1, d_model]
-
-        # raw_attn_weights: [batch_size, seq_length]
-        # norm_attn_weigths: [batch_size, 1, seq_length]
-        # context: [batch_size, 1, d_model]
-        raw_attn_weights, norm_attn_weights = self.attn(decoder_output, encoder_outputs)
-        context = norm_attn_weights.bmm(encoder_outputs) 
-
-        decoder_output = decoder_output.squeeze(1)                   # decoder_output: [batch_size, d_model]
-        context = context.squeeze(1)                                 # context: [batch_size, d_model]
-        context = self.context_bn(context)
-
-        fc_layer1_input = torch.cat((decoder_output, context), 1)    # fc_layer1_input: [batch_size, 2 * d_model]
-        fc_layer1_output = F.relu(self.fc_layer1(fc_layer1_input))   # fc_layer1_output: [batch_size, d_linear]
-
-        fc_layer2_output = self.fc_layer2(fc_layer1_output)          # fc_layer2_output: [batch_size, num_classes]        
-        #fc_layer2_output = F.softmax(fc_layer2_output, dim=1)
-
-        context = context.unsqueeze(0)                               # context: [1, batch_size, d_model]
-        decoder_output = decoder_output.unsqueeze(0)                 # decoder_output: [1, batch_size, d_model]
-
-        return raw_attn_weights, context, decoder_output, fc_layer2_output
-
-    def init_input_hidden(self, batch_size, device):
-        return torch.zeros(1, batch_size, self.d_model).to(device), torch.zeros(1, batch_size, self.d_model).to(device)
+        seg_features = self.frame2seg(frame_features)       # seg_features: [batch_size, seg_length=60, d_model]
+        vid_probs = self.classifier(seg_features, device)   # vid_probs: [batch_size, num_classes]
+        return vid_probs
