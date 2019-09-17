@@ -138,9 +138,10 @@ def main(args):
             running_vid_label_loss = 0.0
             running_vid_cent_loss = 0.0
             running_time_loss = 0.0
+            running_vid_label_corrects = 0
             running_vid_label_size = 0
             running_time_label_size = 0
-            running_vid_corrects = 0
+            running_num_vid_labels = 0
 
             if phase == 'train':
                 scheduler.step()
@@ -168,29 +169,33 @@ def main(args):
                 batch_size = vid_labels.size(0)
                 vid_label_size = args.num_classes * batch_size
                 time_label_size = 0
+                vid_label_lengths = vid_labels.float().ge(0.5).sum(dim=1).view(-1, 1)
+                num_vid_labels = vid_labels.float().ge(0.5).sum()
 
                 with torch.set_grad_enabled(phase == 'train'):
                     total_loss = 0.0
                     vid_label_loss = 0.0
                     vid_cent_loss = 0.0
                     time_loss = 0.0
-                    vid_corrects = 0
-                    time_corrects = 0
 
                     # vid_probs: [batch_size, num_classes]
                     vid_probs = model(frame_rgbs, frame_audios, device)
+                    
+                    _, vid_preds = torch.topk(vid_probs, args.max_vid_label_length)
+                    vid_preds = vid_preds + 1
+                    mask = torch.arange(1, args.max_vid_label_length+1).to(device)
+                    mask = mask.expand(batch_size, args.max_vid_label_length)
+                    zeros = torch.zeros(batch_size, args.max_vid_label_length).long().to(device)
+                    vid_preds = torch.where(mask <= vid_label_lengths, vid_preds, zeros)
+                    vid_preds = torch.zeros(batch_size, args.num_classes+1).to(device).scatter(1, vid_preds, 1).long()
+                    vid_preds = vid_preds[:, 1:]
+                    vid_labels = torch.zeros(batch_size, args.num_classes+1).to(device).scatter(1, vid_labels, 1).long()
+                    vid_labels = vid_labels[:, 1:]
+                    vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
                     vid_label_loss = video_label_loss(vid_probs, vid_labels)
                     total_loss = vid_label_loss / vid_label_size
                     #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
-
-                                                
-                    #    zeros = torch.zeros(batch_size, dtype=torch.long).to(device)
-                    #    mask = 1 - torch.eq(selected_vid_label, zeros)
-                    #    vid_correct = torch.eq(selected_vid_label, vid_pred)
-                    #    vid_correct = vid_correct.masked_select(mask)
-                    #    vid_corrects += torch.sum(vid_correct)
-
 
                     if phase == 'train':
                         total_loss.backward()
@@ -198,30 +203,36 @@ def main(args):
                         optimizer.step()
 
                 running_vid_label_loss += vid_label_loss.item()
+                running_vid_label_corrects += vid_label_corrects.item()
                 #running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size
+                running_num_vid_labels += num_vid_labels.item()
                 #if args.which_challenge == 'xxx_challenge':
                 #    running_time_label_size += time_label_size.item()
                 #    running_time_loss += time_loss.item()
-                #break
 
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
             #epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             #epoch_time_loss = 0.0
             epoch_total_loss = epoch_vid_label_loss
             #epoch_total_loss = epoch_vid_label_loss + epoch_vid_cent_loss
+            epoch_vid_label_recall = running_vid_label_corrects / running_num_vid_labels
 
             #if args.which_challenge == 'xxx_challenge':
             #    epoch_time_loss = running_time_loss / running_time_label_size
             #    epoch_total_loss = epoch_vid_label_loss + epoch_time_loss
 
-            print('| {} SET | Epoch [{:02d}/{:02d}], Total Loss: {:.4f}, Video Label Loss: {:.4f}' \
-                  .format(phase.upper(), epoch+1, args.num_epochs, \
-                          epoch_total_loss, epoch_vid_label_loss))
+            print('| {} SET | Epoch [{:02d}/{:02d}]'.format(phase.upper(), epoch+1, args.num_epochs))
+            print('\t*- Total Loss        : {:.4f}'.format(epoch_total_loss))
+            print('\t*- Video Label Loss  : {:.4f}'.format(epoch_vid_label_loss))
+            print('\t*- Video Label Recall: {:.4f}'.format(epoch_vid_label_recall))
 
             # Log the loss in an epoch.
             with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
-                f.write(str(epoch+1) + '\t' + str(epoch_total_loss) + '\t' + str(epoch_vid_label_loss))
+                f.write(str(epoch+1) + '\t' +
+                        str(epoch_total_loss) + '\t' +
+                        str(epoch_vid_label_loss) + '\t' +
+                        str(epoch_vid_label_recall))
 
             # Save the model check points.
             if phase == 'train' and (epoch+1) % args.save_step == 0:
@@ -300,7 +311,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=3,
+    parser.add_argument('--step_size', type=int, default=5,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
@@ -312,7 +323,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
 
-    parser.add_argument('--num_epochs', type=int, default=10,
+    parser.add_argument('--num_epochs', type=int, default=20,
                         help='the number of epochs. (100)')
 
     parser.add_argument('--batch_size', type=int, default=64,
