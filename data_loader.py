@@ -16,8 +16,7 @@ class YouTubeDataset(data.Dataset):
                  max_vid_label_length=5,
                  max_seg_label_length=15,
                  rgb_feature_size=1024,
-                 audio_feature_size=128,
-                 num_classes=1001):
+                 audio_feature_size=128):
         self.input_dir = input_dir + which_challenge + \
             '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
         self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
@@ -28,7 +27,6 @@ class YouTubeDataset(data.Dataset):
         self.max_seg_label_length = max_seg_label_length
         self.rgb_feature_size = rgb_feature_size
         self.audio_feature_size = audio_feature_size
-        self.num_classes = num_classes
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
@@ -160,7 +158,6 @@ def get_dataloader(
     max_seg_label_length,
     rgb_feature_size,
     audio_feature_size,
-    num_classes,
     batch_size,
     num_workers):
 
@@ -173,8 +170,7 @@ def get_dataloader(
             max_vid_label_length=max_vid_label_length,
             max_seg_label_length=max_seg_label_length,
             rgb_feature_size=rgb_feature_size,
-            audio_feature_size=audio_feature_size,
-            num_classes=num_classes)
+            audio_feature_size=audio_feature_size)
         for phase in phases}
 
     data_loaders = {
