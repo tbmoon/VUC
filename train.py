@@ -180,7 +180,8 @@ def main(args):
 
                     # vid_probs: [batch_size, num_classes]
                     vid_probs = model(frame_rgbs, frame_audios, device)
-                    
+                    vid_label_loss = video_label_loss(vid_probs, vid_labels)
+
                     _, vid_preds = torch.topk(vid_probs, args.max_vid_label_length)
                     vid_preds = vid_preds + 1
                     mask = torch.arange(1, args.max_vid_label_length+1).to(device)
@@ -193,7 +194,6 @@ def main(args):
                     vid_labels = vid_labels[:, 1:]
                     vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
-                    vid_label_loss = video_label_loss(vid_probs, vid_labels)
                     total_loss = vid_label_loss / vid_label_size
                     #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
 
