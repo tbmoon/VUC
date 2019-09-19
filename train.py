@@ -128,13 +128,13 @@ def main(args):
         checkpoint = torch.load(args.model_dir + '/model-epoch-pretrained.ckpt')
         model.load_state_dict(checkpoint['model_state_dict'])
 
-    params = list(model.parameters()) + list(center_loss.parameters())
+    params = list(model.parameters())# + list(center_loss.parameters())
     optimizer = optim.Adam(params, lr=args.learning_rate)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
     for epoch in range(args.num_epochs):
-        since = time.time()
         for phase in ['train', 'valid']:
+            since = time.time()
             running_vid_label_loss = 0.0
             running_vid_cent_loss = 0.0
             running_time_loss = 0.0
@@ -239,9 +239,9 @@ def main(args):
                 torch.save({'epoch': epoch+1,
                             'model_state_dict': model.state_dict()},
                            os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
-        time_elapsed = time.time() - since
-        print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
-              .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
+            time_elapsed = time.time() - since
+            print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
+                  .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
         print()
 
 
@@ -311,7 +311,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=5,
+    parser.add_argument('--step_size', type=int, default=4,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
