@@ -296,14 +296,13 @@ class Classifier(nn.Module):
             - vid_probs: [batch_size, num_classes]
         '''
         vid_logits = torch.Tensor().to(device)
-        seg_values = self.linear(seg_features)                                # seg_values: [batch_size, seg_length, d_proj]
+        seg_values = self.linear(seg_features)                              # seg_values: [batch_size, seg_length, d_proj]
         for seg_attn in self.seg_attns:
-            vid_feature = seg_attn(seg_features, seg_features, seg_values)    # vid_feature: [batch_size, 1, d_proj]
-            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))        # vid_logit: [batch_size, num_classes, 1]
-            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)            # vid_logits: [batch_size, num_classes, n_attns]
-        vid_logits = vid_logits.squeeze(2)                    # vid_logits: [batch_size, num_classes]
-        #vid_logits = self.maxpool1d(vid_logits).squeeze(2)                    # vid_logits: [batch_size, num_classes]
-        vid_probs = self.sigmoid(vid_logits)                                  # vid_probs: [batch_size, num_classes]
+            vid_feature = seg_attn(seg_features, seg_features, seg_values)  # vid_feature: [batch_size, 1, d_proj]
+            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))      # vid_logit: [batch_size, num_classes, 1]
+            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)          # vid_logits: [batch_size, num_classes, n_attns]
+        vid_logits = self.maxpool1d(vid_logits).squeeze(2)                  # vid_logits: [batch_size, num_classes]
+        vid_probs = self.sigmoid(vid_logits)                                # vid_probs: [batch_size, num_classes]
         return vid_probs
 
 
