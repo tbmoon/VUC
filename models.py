@@ -249,7 +249,7 @@ class SegmentAttention(nn.Module):
         Take in number of projection size.
         '''
         super(SegmentAttention, self).__init__()
-        self.linears = clones(nn.Linear(d_model, d_proj), 2)
+        self.linear = nn.Linear(d_model, d_proj)
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
 
@@ -262,9 +262,8 @@ class SegmentAttention(nn.Module):
         # 1) Do all the linear projections in batch from d_model => d_proj
         # query, key: [batch_size, seg_length, d_model]
         # query, key, value: [batch_size, seg_length, d_proj]
-        query, key = \
-            [l(x) for l, x in zip(self.linears, (query, key))]
-
+        query = self.linear(query)
+        
         # 2) Apply attention on all the projected vectors in batch.
         x, self.attn = seg_attention(query, key, value, dropout=self.dropout)
         
@@ -279,10 +278,13 @@ class Classifier(nn.Module):
     '''
     def __init__(self, d_model, d_proj, n_attns, num_classes, dropout=0.1):
         super(Classifier, self).__init__()
+        self.n_attns = n_attns
         self.num_classes = num_classes
-        self.linear = nn.Linear(d_model, d_proj)
+        self.key = nn.Linear(d_model, d_proj)
+        self.value = nn.Linear(d_model, d_proj)
         self.seg_attns = clones(SegmentAttention(d_model, d_proj, dropout), n_attns)
         self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj)
+        self.norm = LayerNorm(num_classes)
         self.maxpool1d = nn.MaxPool1d(kernel_size=n_attns, stride=1, padding=0)
         self.dropout = nn.Dropout(p=dropout)
         self.sigmoid = nn.Sigmoid()
@@ -296,13 +298,16 @@ class Classifier(nn.Module):
             - vid_probs: [batch_size, num_classes]
         '''
         vid_logits = torch.Tensor().to(device)
-        seg_values = self.linear(seg_features)                              # seg_values: [batch_size, seg_length, d_proj]
+        seg_keys = self.key(seg_features)                               # seg_keys: [batch_size, seg_length, d_proj] 
+        seg_values = self.value(seg_features)                           # seg_values: [batch_size, seg_length, d_proj]
         for seg_attn in self.seg_attns:
-            vid_feature = seg_attn(seg_features, seg_features, seg_values)  # vid_feature: [batch_size, 1, d_proj]
-            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))      # vid_logit: [batch_size, num_classes, 1]
-            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)          # vid_logits: [batch_size, num_classes, n_attns]
-        vid_logits = self.maxpool1d(vid_logits).squeeze(2)                  # vid_logits: [batch_size, num_classes]
-        vid_probs = self.sigmoid(vid_logits)                                # vid_probs: [batch_size, num_classes]
+            vid_feature = seg_attn(seg_features, seg_keys, seg_values)  # vid_feature: [batch_size, 1, d_proj]
+            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))  # vid_logit: [batch_size, num_classes, 1]
+            vid_logit = self.norm(vid_logit.squeeze(2)).unsqueeze(2)
+            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)      # vid_logits: [batch_size, num_classes, n_attns]
+        vid_logits = self.maxpool1d(vid_logits).squeeze(2)              # vid_logits: [batch_size, num_classes]
+        vid_probs = self.sigmoid(vid_logits)                            # vid_probs: [batch_size, num_classes]
+
         return vid_probs
 
 
