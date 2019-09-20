@@ -20,7 +20,7 @@ class YouTubeDataset(data.Dataset):
         self.input_dir = input_dir + which_challenge + \
             '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
         self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
-        #self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
+        self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
         self.max_vid_label_length = max_vid_label_length
@@ -35,9 +35,9 @@ class YouTubeDataset(data.Dataset):
         frame_audio = torch.from_numpy(np.array(data['frame_audio'][:self.max_frame_length])).float()
 
         # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
-        #offset = 4./512
-        #frame_rgb = frame_rgb - offset
-        #frame_rgb = frame_rgb * torch.from_numpy(self.pca)
+        offset = 4./512
+        frame_rgb = frame_rgb - offset
+        frame_rgb = frame_rgb * torch.from_numpy(self.pca)
 
         if self.load_labels == True:
             vid_label = random.sample(data['video_labels'], len(data['video_labels']))
@@ -95,7 +95,7 @@ def collate_fn(data):
     """
 
     # Sort a data list by vid_label length (descending order).
-    #data.sort(key=lambda x: len(x[2]), reverse=True)
+    data.sort(key=lambda x: len(x[2]), reverse=True)
 
     # frame_rgbs: tuple of frame_rgb.
     # frame_audios: tuple of frame_audio.

@@ -287,20 +287,20 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame. (128)')
 
-    parser.add_argument('--d_model', type=int, default=256,
+    parser.add_argument('--d_model', type=int, default=128,
                         help='d_model for feature projection. \
                               512 for paper. (256)')
 
-    parser.add_argument('--d_proj', type=int, default=128,
+    parser.add_argument('--d_proj', type=int, default=64,
                         help='d_proj for q, k, v projection. (64)')
 
-    parser.add_argument('--d_ff', type=int, default=512,
+    parser.add_argument('--d_ff', type=int, default=256,
                         help='d_ff. 2048 for paper. (1024)')
 
-    parser.add_argument('--d_linear', type=int, default=1024,
+    parser.add_argument('--d_linear', type=int, default=512,
                         help='d_linear. (2048)')
     
-    parser.add_argument('--n_attns', type=int, default=4,
+    parser.add_argument('--n_attns', type=int, default=1,
                         help='n_heads for the attention. (4)')
 
     parser.add_argument('--num_classes', type=int, default=1000,
