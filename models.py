@@ -249,7 +249,7 @@ class SegmentAttention(nn.Module):
         Take in number of projection size.
         '''
         super(SegmentAttention, self).__init__()
-        self.linears = clones(nn.Linear(d_model, d_proj), 3)
+        self.linears = clones(nn.Linear(d_model, d_proj), 2)
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
 
@@ -260,10 +260,10 @@ class SegmentAttention(nn.Module):
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => d_proj
-        # query, key, value: [batch_size, seg_length, d_model]
+        # query, key: [batch_size, seg_length, d_model]
         # query, key, value: [batch_size, seg_length, d_proj]
-        query, key, value = \
-            [l(x) for l, x in zip(self.linears, (query, key, value))]
+        query, key = \
+            [l(x) for l, x in zip(self.linears, (query, key))]
 
         # 2) Apply attention on all the projected vectors in batch.
         x, self.attn = seg_attention(query, key, value, dropout=self.dropout)
@@ -277,10 +277,13 @@ class Classifier(nn.Module):
     '''
     Classify video labels.
     '''
-    def __init__(self, d_model, d_proj, num_classes, dropout=0.1):
+    def __init__(self, d_model, d_proj, n_attns, num_classes, dropout=0.1):
         super(Classifier, self).__init__()
-        self.seg_attn = SegmentAttention(d_model, d_proj, dropout)
+        self.num_classes = num_classes
+        self.linear = nn.Linear(d_model, d_proj)
+        self.seg_attns = clones(SegmentAttention(d_model, d_proj, dropout), n_attns)
         self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj)
+        self.maxpool1d = nn.MaxPool1d(kernel_size=n_attns, stride=1, padding=0)
         self.dropout = nn.Dropout(p=dropout)
         self.sigmoid = nn.Sigmoid()
 
@@ -292,10 +295,14 @@ class Classifier(nn.Module):
         outputs:
             - vid_probs: [batch_size, num_classes]
         '''
-        vid_feature = self.seg_attn(seg_features, seg_features, seg_features)  # vid_feature: [batch_size, 1, d_proj]
-        vid_logits = self.conv1d(self.dropout(F.relu(vid_feature)))            # vid_logits: [batch_size, num_classes, 1]
-        vid_logits = vid_logits.squeeze(2)                                     # vid_logits: [batch_size, num_classes]
-        vid_probs = self.sigmoid(vid_logits)                                   # vid_probs: [batch_size, num_classes]
+        vid_logits = torch.Tensor().to(device)
+        seg_values = self.linear(seg_features)                                # seg_values: [batch_size, seg_length, d_proj]
+        for seg_attn in self.seg_attns:
+            vid_feature = seg_attn(seg_features, seg_features, seg_values)    # vid_feature: [batch_size, 1, d_proj]
+            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))        # vid_logit: [batch_size, num_classes, 1]
+            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)            # vid_logits: [batch_size, num_classes, n_attns]
+        vid_logits = self.maxpool1d(vid_logits).squeeze(2)                    # vid_logits: [batch_size, num_classes]
+        vid_probs = self.sigmoid(vid_logits)                                  # vid_probs: [batch_size, num_classes]
         return vid_probs
 
 
@@ -304,8 +311,8 @@ class TransformerModel(nn.Module):
     Implement model based on the transformer.
     '''
     def __init__(self, n_layers, n_heads, rgb_feature_size,
-                 audio_feature_size, d_model, d_ff, d_proj, num_classes,
-                 dropout):
+                 audio_feature_size, d_model, d_ff, d_proj, n_attns,
+                 num_classes, dropout):
         super(TransformerModel, self).__init__()
         c = copy.deepcopy
         self.d_model = d_model
@@ -316,7 +323,7 @@ class TransformerModel(nn.Module):
         self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
         self.encoder = Encoder(self.encoder_layer, n_layers)
         self.frame2seg = Frame2Segment()
-        self.classifier = Classifier(d_model, d_proj, num_classes, dropout)
+        self.classifier = Classifier(d_model, d_proj, n_attns, num_classes, dropout)
 
     def forward(self, padded_frame_rgbs, padded_frame_audios, device):
         '''
