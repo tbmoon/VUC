@@ -228,10 +228,10 @@ def seg_attention(query, key, value, dropout=None):
     '''
     Compute 'Scaled Dot Product Attention'.
     '''
-    # query, key, value: [batch_size, frame_length, d_proj]
-    # scores: [batch_size, frame_length]
-    # seg_attn: [batch_size, frame_length]
-    # p_attn: [batch_size, frame_length]
+    # query, key, value: [batch_size, seg_length, d_proj]
+    # scores: [batch_size, seg_length]
+    # seg_attn: [batch_size, seg_length]
+    # p_attn: [batch_size, seg_length]
     d_proj = query.size(-1)
     scores = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
     seg_attn = torch.sigmoid(scores)
@@ -239,8 +239,8 @@ def seg_attention(query, key, value, dropout=None):
     #if dropout is not None:
     #    p_attn = dropout(p_attn)
 
-    # weighted_sum: [batch_size, frame_length, d_proj]
-    # seg_attn: [batch_size, frame_length]
+    # weighted_sum: [batch_size, seg_length, d_proj]
+    # seg_attn: [batch_size, seg_length]
     weighted_sum = p_attn.unsqueeze(2) * value
     return weighted_sum, seg_attn
 
@@ -252,26 +252,34 @@ class SegmentAttention(nn.Module):
         '''
         super(SegmentAttention, self).__init__()
         self.linear = nn.Linear(d_model, d_proj)
-        self.seg_attn = None
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, query, key, value):
         '''
-        Implement Figure 2.
+        inputs:
+            - query: [batch_size, seg_length, d_model]
+            - key: [batch_size, seg_length, d_proj]
+            - value: [batch_size, seg_length, d_proj]
+        outputs:
+            - weighted_sum: [batch_size, 1, d_proj]
+            - attn_weight: [batch_size, seg_length]
         '''
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => d_proj
-        # query, key: [batch_size, seg_length, d_model]
+        # query: [batch_size, seg_length, d_model]
         # query, key, value: [batch_size, seg_length, d_proj]
         query = self.linear(query)
-        
+
         # 2) Apply attention on all the projected vectors in batch.
-        x, self.seg_attn = seg_attention(query, key, value, dropout=self.dropout)
-        
+        # weighted_sum: [batch_size, seg_length, d_proj]
+        # attn_weight: [batch_size, seg_length]
+        weighted_sum, attn_weight = seg_attention(query, key, value, dropout=self.dropout)
+
         # 3) Apply element-wise summation w.r.t. seg_length.
-        x = torch.sum(x, dim=1, keepdim=True)  # x: [batch_size, 1, d_proj]
-        return x
+        # weighted_sum: [batch_size, 1, d_proj]
+        weighted_sum = torch.sum(weighted_sum, dim=1, keepdim=True)
+        return weighted_sum, attn_weight
 
 
 class Classifier(nn.Module):
@@ -288,7 +296,6 @@ class Classifier(nn.Module):
         self.seg_attns = clones(SegmentAttention(d_model, d_proj, dropout), n_attns)
         self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj)
         self.norm = LayerNorm(num_classes)
-        self.maxpool1d = nn.MaxPool1d(kernel_size=n_attns, stride=1, padding=0)
         self.dropout = nn.Dropout(p=dropout)
         self.sigmoid = nn.Sigmoid()
 
@@ -299,26 +306,36 @@ class Classifier(nn.Module):
             - seg_features: [batch_size, seg_length, d_model]
         outputs:
             - vid_probs: [batch_size, num_classes]
+            - attn_idc: [batch_size, num_classes]
+            - attn_weights: [batch_size, seg_length, n_attns]
+            - conv_loss: []
         '''
         batch_size = seg_features.size(0)
         vid_logits = torch.Tensor().to(device)
-        seg_keys = self.key(seg_features)                               # seg_keys: [batch_size, seg_length, d_proj] 
-        seg_values = self.value(seg_features)                           # seg_values: [batch_size, seg_length, d_proj]
+        attn_weights = torch.Tensor().to(device)
+        seg_keys = self.key(seg_features)                                 # seg_keys: [batch_size, seg_length, d_proj] 
+        seg_values = self.value(seg_features)                             # seg_values: [batch_size, seg_length, d_proj]
         for seg_attn in self.seg_attns:
-            vid_feature = seg_attn(seg_features, seg_keys, seg_values)  # vid_feature: [batch_size, 1, d_proj]
-            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))  # vid_logit: [batch_size, num_classes, 1]
+            # vid_feature: [batch_size, 1, d_proj]
+            # attn_weight: [batch_size, seg_length]
+            vid_feature, attn_weight = seg_attn(seg_features, seg_keys, seg_values)
+            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))    # vid_logit: [batch_size, num_classes, 1]
             vid_logit = self.norm(vid_logit.squeeze(2)).unsqueeze(2)
-            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)      # vid_logits: [batch_size, num_classes, n_attns]
-        vid_logits = self.maxpool1d(vid_logits).squeeze(2)              # vid_logits: [batch_size, num_classes]
-        vid_probs = self.sigmoid(vid_logits)                            # vid_probs: [batch_size, num_classes]
-        
-        conv_pars = torch.ones(batch_size, 1, self.d_proj).to(device)   # conv_pars: [batch_size, 1, d_proj]
-        conv_pars = self.conv1d(conv_pars).squeeze(2)                   # conv_pars: [batch_size, num_classes]
-        conv_pars = F.softmax(conv_pars, dim=1)
-        conv_loss = conv_pars.std(1, keepdim=False)                           # std: [batch_size]
-        conv_loss = conv_loss.sum(dim=0)
+            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)        # vid_logits: [batch_size, num_classes, n_attns]
+            attn_weight = attn_weight.unsqueeze(2)                        # attn_weight: [batch_size, seg_length, 1]
+            attn_weights = torch.cat((attn_weights, attn_weight), dim=2)  # attn_weights: [batch_size, seg_length, n_attns]
+            
+        # Do "maxpool1d" using torch.max for max logits and indice.
+        vid_logits, attn_idc = torch.max(vid_logits, dim=2)               # vid_logits, attn_idc: [batch_size, num_classes]
+        vid_probs = self.sigmoid(vid_logits)                              # vid_probs: [batch_size, num_classes]
 
-        return vid_probs, conv_loss
+        conv_pars = torch.ones(batch_size, 1, self.d_proj).to(device)     # conv_pars: [batch_size, 1, d_proj]
+        conv_pars = self.conv1d(conv_pars).squeeze(2)                     # conv_pars: [batch_size, num_classes]
+        conv_pars = F.softmax(conv_pars, dim=1)
+        conv_loss = conv_pars.std(1, keepdim=False)                       # conv_loss: [batch_size]
+        conv_loss = conv_loss.sum(dim=0)                                  # conv_loss: []
+
+        return vid_probs, attn_idc, attn_weights, conv_loss
 
 
 class TransformerModel(nn.Module):
@@ -347,6 +364,9 @@ class TransformerModel(nn.Module):
             - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
         outputs:
             - vid_probs: [batch_size, num_classes]
+            - attn_idc: [batch_size, num_classes]
+            - attn_weights: [batch_size, seg_length, n_attns]
+            - conv_loss: []
         '''
         padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
         padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
@@ -357,5 +377,5 @@ class TransformerModel(nn.Module):
         frame_features = self.position(frame_features)
         frame_features = self.encoder(frame_features)
         seg_features = self.frame2seg(frame_features)       # seg_features: [batch_size, seg_length=60, d_model]
-        vid_probs = self.classifier(seg_features, device)   # vid_probs: [batch_size, num_classes]
-        return vid_probs
+        vid_probs, attn_idc, attn_weights, conv_loss = self.classifier(seg_features, device)
+        return vid_probs, attn_idc, attn_weights, conv_loss

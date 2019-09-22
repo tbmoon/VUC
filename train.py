@@ -182,7 +182,10 @@ def main(args):
                     time_loss = 0.0
 
                     # vid_probs: [batch_size, num_classes]
-                    vid_probs, conv_loss = model(frame_rgbs, frame_audios, device)
+                    # attn_idc: [batch_size, num_classes]
+                    # attn_weights: [batch_size, seg_length, n_attns]
+                    # conv_loss: []
+                    vid_probs, attn_idc, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
                     vid_label_loss = video_label_loss(vid_probs, vid_labels)
 
                     _, vid_preds = torch.topk(vid_probs, args.max_vid_label_length)
