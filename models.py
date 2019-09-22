@@ -230,17 +230,19 @@ def seg_attention(query, key, value, dropout=None):
     '''
     # query, key, value: [batch_size, frame_length, d_proj]
     # scores: [batch_size, frame_length]
+    # seg_attn: [batch_size, frame_length]
     # p_attn: [batch_size, frame_length]
     d_proj = query.size(-1)
     scores = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
-    p_attn = F.softmax(scores, dim=-1)
-    if dropout is not None:
-        p_attn = dropout(p_attn)
+    seg_attn = torch.sigmoid(scores)
+    p_attn = F.softmax(seg_attn, dim=-1)
+    #if dropout is not None:
+    #    p_attn = dropout(p_attn)
 
     # weighted_sum: [batch_size, frame_length, d_proj]
-    # p_attn: [batch_size, frame_length]
+    # seg_attn: [batch_size, frame_length]
     weighted_sum = p_attn.unsqueeze(2) * value
-    return weighted_sum, p_attn
+    return weighted_sum, seg_attn
 
 
 class SegmentAttention(nn.Module):
@@ -250,7 +252,7 @@ class SegmentAttention(nn.Module):
         '''
         super(SegmentAttention, self).__init__()
         self.linear = nn.Linear(d_model, d_proj)
-        self.attn = None
+        self.seg_attn = None
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, query, key, value):
@@ -265,7 +267,7 @@ class SegmentAttention(nn.Module):
         query = self.linear(query)
         
         # 2) Apply attention on all the projected vectors in batch.
-        x, self.attn = seg_attention(query, key, value, dropout=self.dropout)
+        x, self.seg_attn = seg_attention(query, key, value, dropout=self.dropout)
         
         # 3) Apply element-wise summation w.r.t. seg_length.
         x = torch.sum(x, dim=1, keepdim=True)  # x: [batch_size, 1, d_proj]
