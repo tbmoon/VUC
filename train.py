@@ -137,10 +137,12 @@ def main(args):
         for phase in ['train', 'valid']:
             since = time.time()
             running_vid_label_loss = 0.0
+            running_conv_loss = 0.0
             running_vid_cent_loss = 0.0
             running_time_loss = 0.0
             running_vid_label_corrects = 0
             running_vid_label_size = 0
+            running_conv_size = 0
             running_time_label_size = 0
             running_num_vid_labels = 0
 
@@ -180,7 +182,7 @@ def main(args):
                     time_loss = 0.0
 
                     # vid_probs: [batch_size, num_classes]
-                    vid_probs = model(frame_rgbs, frame_audios, device)
+                    vid_probs, conv_loss = model(frame_rgbs, frame_audios, device)
                     vid_label_loss = video_label_loss(vid_probs, vid_labels)
 
                     _, vid_preds = torch.topk(vid_probs, args.max_vid_label_length)
@@ -195,7 +197,7 @@ def main(args):
                     vid_labels = vid_labels[:, 1:]
                     vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
-                    total_loss = vid_label_loss / vid_label_size
+                    total_loss = vid_label_loss / vid_label_size + conv_loss / batch_size
                     #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
 
                     if phase == 'train':
@@ -204,18 +206,21 @@ def main(args):
                         optimizer.step()
 
                 running_vid_label_loss += vid_label_loss.item()
+                running_conv_loss += conv_loss.item()
                 running_vid_label_corrects += vid_label_corrects.item()
                 #running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size
+                running_conv_size += batch_size
                 running_num_vid_labels += num_vid_labels.item()
                 #if args.which_challenge == 'xxx_challenge':
                 #    running_time_label_size += time_label_size.item()
                 #    running_time_loss += time_loss.item()
 
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
+            epoch_conv_loss = running_conv_loss / running_conv_size 
             #epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             #epoch_time_loss = 0.0
-            epoch_total_loss = epoch_vid_label_loss
+            epoch_total_loss = epoch_vid_label_loss + epoch_conv_loss
             #epoch_total_loss = epoch_vid_label_loss + epoch_vid_cent_loss
             epoch_vid_label_recall = running_vid_label_corrects / running_num_vid_labels
 
@@ -226,6 +231,7 @@ def main(args):
             print('| {} SET | Epoch [{:02d}/{:02d}]'.format(phase.upper(), epoch+1, args.num_epochs))
             print('\t*- Total Loss        : {:.4f}'.format(epoch_total_loss))
             print('\t*- Video Label Loss  : {:.4f}'.format(epoch_vid_label_loss))
+            print('\t*- Conv Loss         : {:.4f}'.format(epoch_conv_loss))
             print('\t*- Video Label Recall: {:.4f}'.format(epoch_vid_label_recall))
 
             # Log the loss in an epoch.
@@ -300,7 +306,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_linear', type=int, default=512,
                         help='d_linear. (2048)')
     
-    parser.add_argument('--n_attns', type=int, default=1,
+    parser.add_argument('--n_attns', type=int, default=4,
                         help='n_heads for the attention. (4)')
 
     parser.add_argument('--num_classes', type=int, default=1000,
@@ -309,7 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='dropout. (0.1)')
 
-    parser.add_argument('--learning_rate', type=float, default=0.01,
+    parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='learning rate for training. (0.01)')
 
     parser.add_argument('--clip', type=float, default=0.25,

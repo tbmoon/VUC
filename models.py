@@ -278,6 +278,7 @@ class Classifier(nn.Module):
     '''
     def __init__(self, d_model, d_proj, n_attns, num_classes, dropout=0.1):
         super(Classifier, self).__init__()
+        self.d_proj = d_proj
         self.n_attns = n_attns
         self.num_classes = num_classes
         self.key = nn.Linear(d_model, d_proj)
@@ -297,6 +298,7 @@ class Classifier(nn.Module):
         outputs:
             - vid_probs: [batch_size, num_classes]
         '''
+        batch_size = seg_features.size(0)
         vid_logits = torch.Tensor().to(device)
         seg_keys = self.key(seg_features)                               # seg_keys: [batch_size, seg_length, d_proj] 
         seg_values = self.value(seg_features)                           # seg_values: [batch_size, seg_length, d_proj]
@@ -307,8 +309,14 @@ class Classifier(nn.Module):
             vid_logits = torch.cat((vid_logits, vid_logit), dim=2)      # vid_logits: [batch_size, num_classes, n_attns]
         vid_logits = self.maxpool1d(vid_logits).squeeze(2)              # vid_logits: [batch_size, num_classes]
         vid_probs = self.sigmoid(vid_logits)                            # vid_probs: [batch_size, num_classes]
+        
+        conv_pars = torch.ones(batch_size, 1, self.d_proj).to(device)   # conv_pars: [batch_size, 1, d_proj]
+        conv_pars = self.conv1d(conv_pars).squeeze(2)                   # conv_pars: [batch_size, num_classes]
+        conv_pars = F.softmax(conv_pars, dim=1)
+        conv_loss = conv_pars.std(1, keepdim=False)                           # std: [batch_size]
+        conv_loss = conv_loss.sum(dim=0)
 
-        return vid_probs
+        return vid_probs, conv_loss
 
 
 class TransformerModel(nn.Module):
