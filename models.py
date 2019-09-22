@@ -294,7 +294,7 @@ class Classifier(nn.Module):
         self.key = nn.Linear(d_model, d_proj)
         self.value = nn.Linear(d_model, d_proj)
         self.seg_attns = clones(SegmentAttention(d_model, d_proj, dropout), n_attns)
-        self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj)
+        self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj, bias=False)
         self.norm = LayerNorm(num_classes)
         self.dropout = nn.Dropout(p=dropout)
         self.sigmoid = nn.Sigmoid()
