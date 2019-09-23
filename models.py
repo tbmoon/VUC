@@ -234,15 +234,16 @@ def seg_attention(query, key, value, dropout=None):
     # p_attn: [batch_size, seg_length]
     d_proj = query.size(-1)
     scores = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
-    seg_attn = torch.sigmoid(scores)
-    p_attn = F.softmax(seg_attn, dim=-1)
+    p_attn = F.softmax(scores, dim=-1)
+    #seg_attn = torch.sigmoid(scores)
+    #p_attn = F.softmax(seg_attn, dim=-1)
     #if dropout is not None:
     #    p_attn = dropout(p_attn)
 
     # weighted_sum: [batch_size, seg_length, d_proj]
     # seg_attn: [batch_size, seg_length]
     weighted_sum = p_attn.unsqueeze(2) * value
-    return weighted_sum, seg_attn
+    return weighted_sum, p_attn
 
 
 class SegmentAttention(nn.Module):
