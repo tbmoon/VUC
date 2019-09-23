@@ -12,6 +12,8 @@ class YouTubeDataset(data.Dataset):
                  input_dir,
                  which_challenge,
                  phase,
+                 load_split,
+                 split_number,
                  max_frame_length=300,
                  max_vid_label_length=5,
                  max_seg_label_length=15,
@@ -19,7 +21,11 @@ class YouTubeDataset(data.Dataset):
                  audio_feature_size=128):
         self.input_dir = input_dir + which_challenge + \
             '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
-        self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
+        df_dir = os.getcwd() + '/data/' + which_challenge + '/'
+        if load_split == True:
+            self.df = pd.read_csv(df_dir + 'running_dataframes/' + phase + '%04d.csv'%split_number)
+        else:
+            self.df = pd.read_csv(df_dir + phase + '.csv')
         self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
@@ -153,6 +159,8 @@ def get_dataloader(
     input_dir,
     which_challenge,
     phases,
+    load_split,
+    split_number,
     max_frame_length,
     max_vid_label_length,
     max_seg_label_length,
@@ -166,6 +174,8 @@ def get_dataloader(
             input_dir=input_dir,
             which_challenge=which_challenge,
             phase=phase,
+            load_split=load_split,
+            split_number=split_number,
             max_frame_length=max_frame_length,
             max_vid_label_length=max_vid_label_length,
             max_seg_label_length=max_seg_label_length,

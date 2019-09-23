@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
-from center_loss import CenterLoss
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerModel
 
@@ -78,7 +77,6 @@ def binary_cross_entropy_loss_with_seg_label_processing(frame_lengths, selected_
 
     loss = s_loss.masked_select(mask).sum() 
     label_size = mask.sum()
-
     return loss, label_size
 
 
@@ -86,6 +84,9 @@ def main(args):
 
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
+
+    if args.load_split == True:
+        args.learning_rate = args.learning_rate * (10 ** -args.gamma_power)
 
     # the maximum length of video label in 2nd challenge: 18.
     # the maximum length of video label in 3rd challenge: 4.
@@ -95,6 +96,8 @@ def main(args):
         input_dir=args.input_dir,
         which_challenge=args.which_challenge,
         phases=['train', 'valid'],
+        load_split=args.load_split,
+        split_number=args.split_number,
         max_frame_length=args.max_frame_length,
         max_vid_label_length=args.max_vid_label_length,
         max_seg_label_length=args.max_seg_label_length,
@@ -114,10 +117,7 @@ def main(args):
         n_attns = args.n_attns,
         num_classes=args.num_classes,
         dropout=args.dropout)
-
     model = model.to(device)
-
-    center_loss = CenterLoss(num_classes=args.num_classes, feat_dim=args.d_model, device=device)
 
     # This was important from their code.
     # Initialize parameters with Glorot / fan_avg.
@@ -126,10 +126,21 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-pretrained.ckpt')
+        if args.load_split == True:
+            if args.split_number == 0:
+                iepoch_number = args.epoch_number - 1
+                isplit_number = args.num_splits - 1
+            else:
+                iepoch_number = args.epoch_number
+                isplit_number = args.split_number - 1
+            checkpoint = torch.load(
+                args.model_dir + '/model-epoch-%04d-split-%04d.ckpt'%(iepoch_number, isplit_number))
+        else:
+            checkpoint = torch.load(
+                args.model_dir + '/model-epoch-pretrained.ckpt')
         model.load_state_dict(checkpoint['model_state_dict'])
 
-    params = list(model.parameters()) + list(center_loss.parameters())
+    params = list(model.parameters())
     optimizer = optim.Adam(params, lr=args.learning_rate)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
@@ -138,7 +149,6 @@ def main(args):
             since = time.time()
             running_vid_label_loss = 0.0
             running_conv_loss = 0.0
-            running_vid_cent_loss = 0.0
             running_time_loss = 0.0
             running_vid_label_corrects = 0
             running_vid_label_size = 0
@@ -154,7 +164,7 @@ def main(args):
 
             for idx, (frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
                 in enumerate(data_loaders[phase]):
-                
+
                 optimizer.zero_grad()
 
                 # frame_lengths: [batch_size]
@@ -178,7 +188,6 @@ def main(args):
                 with torch.set_grad_enabled(phase == 'train'):
                     total_loss = 0.0
                     vid_label_loss = 0.0
-                    vid_cent_loss = 0.0
                     time_loss = 0.0
 
                     # vid_probs: [batch_size, num_classes]
@@ -201,7 +210,6 @@ def main(args):
                     vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
                     total_loss = vid_label_loss / vid_label_size + conv_loss / batch_size
-                    #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
 
                     if phase == 'train':
                         total_loss.backward()
@@ -211,7 +219,6 @@ def main(args):
                 running_vid_label_loss += vid_label_loss.item()
                 running_conv_loss += conv_loss.item()
                 running_vid_label_corrects += vid_label_corrects.item()
-                #running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size
                 running_conv_size += batch_size
                 running_num_vid_labels += num_vid_labels.item()
@@ -221,38 +228,49 @@ def main(args):
 
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
             epoch_conv_loss = running_conv_loss / running_conv_size 
-            #epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             #epoch_time_loss = 0.0
             epoch_total_loss = epoch_vid_label_loss + epoch_conv_loss
-            #epoch_total_loss = epoch_vid_label_loss + epoch_vid_cent_loss
             epoch_vid_label_recall = running_vid_label_corrects / running_num_vid_labels
 
             #if args.which_challenge == 'xxx_challenge':
             #    epoch_time_loss = running_time_loss / running_time_label_size
             #    epoch_total_loss = epoch_vid_label_loss + epoch_time_loss
 
-            print('| {} SET | Epoch [{:02d}/{:02d}]'.format(phase.upper(), epoch+1, args.num_epochs))
+            if args.load_split == True:
+                print('-| {} SET |-'.format(phase.upper()))
+            else:
+                print('| {} SET | Epoch [{:02d}/{:02d}]'.format(phase.upper(), epoch+1, args.num_epochs))
             print('\t*- Total Loss        : {:.4f}'.format(epoch_total_loss))
             print('\t*- Video Label Loss  : {:.4f}'.format(epoch_vid_label_loss))
             print('\t*- Conv Loss         : {:.4f}'.format(epoch_conv_loss))
             print('\t*- Video Label Recall: {:.4f}'.format(epoch_vid_label_recall))
 
             # Log the loss in an epoch.
-            with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
-                f.write(str(epoch+1) + '\t' +
+            if args.load_split == True:
+                logfile = '%s-log-epoch-%04d-split-%04d.txt'%(phase, args.epoch_number, args.split_number) 
+            else:
+                logfile = '{}-log-epoch-{:02}.txt'.format(phase, epoch)
+            with open(os.path.join(args.log_dir, logfile), 'w') as f:
+                f.write(str(epoch) + '\t' +
                         str(epoch_total_loss) + '\t' +
                         str(epoch_vid_label_loss) + '\t' +
+                        str(epoch_conv_loss) + '\t' +
                         str(epoch_vid_label_recall))
 
             # Save the model check points.
             if phase == 'train' and (epoch+1) % args.save_step == 0:
+                if args.load_split == True:
+                    modelfile = 'model-epoch-%04d-split-%04d.ckpt'%(args.epoch_number, args.split_number)
+                else:
+                    modelfile = 'model-epoch-{:02d}.ckpt'.format(epoch)
                 torch.save({'epoch': epoch+1,
                             'model_state_dict': model.state_dict()},
-                           os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
+                           os.path.join(args.model_dir, modelfile))
+
             time_elapsed = time.time() - since
             print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
                   .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
-        print()
+            print()
 
 
 if __name__ == '__main__':
@@ -274,6 +292,15 @@ if __name__ == '__main__':
 
     parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
+
+    parser.add_argument('--load_split', type=bool, default=False,
+                        help='load splitted dataframe. (False)')
+
+    parser.add_argument('--epoch_number', type=int, default=0,
+                        help='split number for dataframe.')
+
+    parser.add_argument('--split_number', type=int, default=0,
+                        help='split number for dataframe.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
@@ -308,7 +335,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--d_linear', type=int, default=512,
                         help='d_linear. (2048)')
-    
+
     parser.add_argument('--n_attns', type=int, default=4,
                         help='n_heads for the attention. (4)')
 
@@ -330,6 +357,9 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.1,
                         help='multiplicative factor of learning rate decay. (0.1)')
 
+    parser.add_argument('--gamma_power', type=float, default=1,
+                        help='gamma power for spllited runing only. (1)')
+
     parser.add_argument('--focal_loss_gamma', type=int, default=0,
                         help='gamma of focal loss. (5)')
 
@@ -337,7 +367,10 @@ if __name__ == '__main__':
                         help='multiplicative factor of segment loss. (0.1)')
 
     parser.add_argument('--num_epochs', type=int, default=20,
-                        help='the number of epochs. (100)')
+                        help='the number of epochs. (1) / (20)')
+
+    parser.add_argument('--num_splits', type=int, default=100,
+                        help='the number of splits. (100)')
 
     parser.add_argument('--batch_size', type=int, default=64,
                         help='batch_size. (64) / (256)')
