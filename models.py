@@ -294,7 +294,7 @@ class Classifier(nn.Module):
         self.key = nn.Linear(d_model, d_proj)
         self.value = nn.Linear(d_model, d_proj)
         self.seg_attns = clones(SegmentAttention(d_model, d_proj, dropout), n_attns)
-        self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj, bias=False)
+        self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj, bias=True)
         self.norm = LayerNorm(num_classes)
         self.dropout = nn.Dropout(p=dropout)
         self.sigmoid = nn.Sigmoid()
@@ -333,8 +333,7 @@ class Classifier(nn.Module):
         conv_pars = self.conv1d(conv_pars).squeeze(2)                     # conv_pars: [batch_size, num_classes]
         conv_pars = F.softmax(conv_pars, dim=1)
         conv_loss = conv_pars.std(1, keepdim=False)                       # conv_loss: [batch_size]
-        conv_loss = conv_loss.sum(dim=0)                                  # conv_loss: []
-
+        conv_loss = conv_loss.clamp(min=1e-9, max=1e+9).sum(dim=0)        # conv_loss: []
         return vid_probs, attn_idc, attn_weights, conv_loss
 
 
