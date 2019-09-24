@@ -17,10 +17,12 @@ class YouTubeDataset(data.Dataset):
                  max_seg_label_length=15,
                  rgb_feature_size=1024,
                  audio_feature_size=128):
-        self.input_dir = input_dir + which_challenge + \
-            '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
-        self.df = torch.load(input_dir + which_challenge + '/' + phase + '.pt')
-        self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
+        self.input_dir = \
+            os.path.join(input_dir,
+                         which_challenge,
+                         '{}'.format(phase if which_challenge == '2nd_challenge' else 'valid'))
+        self.df = torch.load(os.path.join(input_dir, which_challenge, phase + '.pt'))
+        self.pca = np.sqrt(np.load(os.path.join(input_dir, '../yt8m_pca/eigenvals.npy'))[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
         self.max_vid_label_length = max_vid_label_length
@@ -40,8 +42,7 @@ class YouTubeDataset(data.Dataset):
         frame_rgb = frame_rgb * torch.from_numpy(self.pca)
 
         if self.load_labels == True:
-            vid_label = random.sample(data['video_labels'], len(data['video_labels']))
-            vid_label = torch.from_numpy(np.array(vid_label))
+            vid_label = torch.from_numpy(np.array(data['video_labels']))
             seg_label = torch.LongTensor([0])
             seg_time = torch.LongTensor([0])
             if self.which_challenge == '3rd_challenge':
