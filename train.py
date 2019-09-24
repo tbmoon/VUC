@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
-#from center_loss import CenterLoss
+from center_loss import CenterLoss
 from data_loader import YouTubeDataset, get_dataloader
 from models import TransformerModel
 
@@ -117,7 +117,7 @@ def main(args):
 
     model = model.to(device)
 
-    #center_loss = CenterLoss(num_classes=args.num_classes, feat_dim=args.d_model, device=device)
+    center_loss = CenterLoss(num_classes=args.num_classes, feat_dim=args.d_model, device=device)
 
     # This was important from their code.
     # Initialize parameters with Glorot / fan_avg.
@@ -129,7 +129,7 @@ def main(args):
         checkpoint = torch.load(args.model_dir + '/model-epoch-pretrained.ckpt')
         model.load_state_dict(checkpoint['model_state_dict'])
 
-    params = list(model.parameters()) #+ list(center_loss.parameters())
+    params = list(model.parameters()) + list(center_loss.parameters())
     optimizer = optim.Adam(params, lr=args.learning_rate)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
@@ -260,7 +260,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets_test/',
+                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
     parser.add_argument('--log_dir', type=str, default='./logs',

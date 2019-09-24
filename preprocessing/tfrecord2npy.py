@@ -4,7 +4,6 @@ import pandas as pd
 import glob
 import argparse
 import tensorflow as tf
-import torch
 
 
 def main(args):
@@ -107,7 +106,7 @@ def main(args):
                         dataset['segment_labels'] = seg_labels_list
                         dataset['video_labels'] = list(set(vid_labels_list))
 
-                    torch.save(dataset, output_dir + dataset['video_id'] + '.pt')
+                    np.save(output_dir + dataset['video_id'] + '.npy', np.array(dataset))
             except:
                 pass
 

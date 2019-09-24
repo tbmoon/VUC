@@ -15,7 +15,6 @@ import os
 import numpy as np
 import glob
 import shutil
-import torch
 
 # data_types = ['train', 'valid', 'test']
 # challenge = '2nd_challenge' / '3rd_challenge'
@@ -31,17 +30,13 @@ for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
     bad_frame_dir = data_dir + '{}/bad_datasets/{}/'.format(challenge, data_type)
     os.makedirs(bad_frame_dir, exist_ok=True)
-    file_paths = glob.glob(frame_dir + '*.pt')
+    file_paths = glob.glob(frame_dir + '*.npy')
 
     print('The number of files:', len(file_paths))
     for i, file_path in enumerate (file_paths):
         if i % 10000 == 0:
             print(data_type, i)
-        try :
-            data = torch.load(file_path)
-        except:
-            shutil.move(file_path, bad_frame_dir)
-            pass
+        data = np.load(file_path, allow_pickle=True).item()
         frame_rgb_len = len(data['frame_rgb'])
         frame_audio_len = len(data['frame_audio'])
         vid_label_len = len(data['video_labels'])
@@ -50,7 +45,7 @@ for data_type in data_types:
             break
         if (challenge == '2nd_challenge'):
             assert(data_type == 'train' or data_type == 'valid')
-            if (frame_rgb_len <= 10 or vid_label_len == 0):
+            if (frame_rgb_len <= 30 or vid_label_len == 0 or frame_rgb_len >= 302):
                 shutil.move(file_path, bad_frame_dir)
             else:
                 if max_vid_label_len < vid_label_len:
