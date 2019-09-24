@@ -19,7 +19,7 @@ class YouTubeDataset(data.Dataset):
                  audio_feature_size=128):
         self.input_dir = input_dir + which_challenge + \
             '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
-        self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
+        self.df = torch.load(input_dir + which_challenge + '/' + phase + '.pt')
         self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
@@ -30,7 +30,7 @@ class YouTubeDataset(data.Dataset):
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
-        data = torch.load(os.path.join(self.input_dir, self.df['id'][idx]))
+        data = torch.load(os.path.join(self.input_dir, self.df[idx]))
         frame_rgb = torch.from_numpy(np.array(data['frame_rgb'][:self.max_frame_length])).float()
         frame_audio = torch.from_numpy(np.array(data['frame_audio'][:self.max_frame_length])).float()
 
