@@ -30,7 +30,7 @@ class YouTubeDataset(data.Dataset):
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
-        data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
+        data = torch.load(os.path.join(self.input_dir, self.df['id'][idx]))
         frame_rgb = torch.from_numpy(np.array(data['frame_rgb'][:self.max_frame_length])).float()
         frame_audio = torch.from_numpy(np.array(data['frame_audio'][:self.max_frame_length])).float()
 
