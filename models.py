@@ -379,3 +379,37 @@ class TransformerModel(nn.Module):
         seg_features = self.frame2seg(frame_features)       # seg_features: [batch_size, seg_length=60, d_model]
         vid_probs, attn_idc, attn_weights, conv_loss = self.classifier(seg_features, device)
         return vid_probs, attn_idc, attn_weights, conv_loss
+
+
+class BaseModel(nn.Module):
+    '''
+    Implement model based on the FFN.
+    '''
+    def __init__(self, rgb_feature_size, audio_feature_size, num_classes):
+        super(BaseModel, self).__init__()
+        self.maxpool1d = nn.MaxPool1d(kernel_size=300, stride=1, padding=0)
+        self.avgpool1d = nn.AvgPool1d(kernel_size=300, stride=1, padding=0)
+        self.linear = nn.Linear(rgb_feature_size + audio_feature_size, num_classes)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, padded_frame_rgbs, padded_frame_audios):
+        '''
+        inputs:
+            - padded_frame_rgbs: [batch_size, frame_length, rgb_feature_size]
+            - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
+        outputs:
+            - vid_probs: [batch_size, num_classes]
+        '''
+        padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
+        padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
+
+        # frame_features: [batch_size, frame_length, (rgb + audio) feature_size]
+        frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
+        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, feature_size, frame_length]
+        frame_features = self.avgpool1d(frame_features)  # frame_features: [batch_size, feature_size, 1]
+        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, 1, feature_size]        
+        frame_features = frame_features.squeeze(1)       # frame_features: [batch_size, feature_size]
+
+        vid_probs = self.linear(frame_features)
+        vid_probs = self.sigmoid(vid_probs)
+        return vid_probs
