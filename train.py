@@ -109,6 +109,8 @@ def main(args):
             n_heads=args.n_heads,
             rgb_feature_size=args.rgb_feature_size,
             audio_feature_size=args.audio_feature_size,
+            d_rgb=args.d_rgb,
+            d_audio=args.d_audio,
             d_model=args.d_model,
             d_ff=args.d_ff,
             d_proj=args.d_proj,
@@ -316,11 +318,17 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature_size', type=int, default=128,
                         help='audio feature size in a frame. (128)')
 
+    parser.add_argument('--d_rgb', type=int, default=2048,
+                         help='mapping rgb size. (2048)')
+
+    parser.add_argument('--d_audio', type=int, default=256,
+                         help='mapping audio size. (256)')
+
     parser.add_argument('--d_model', type=int, default=128,
                         help='d_model for feature projection. \
                               512 for paper. (256)')
 
-    parser.add_argument('--d_proj', type=int, default=64,
+    parser.add_argument('--d_proj', type=int, default=1024,
                         help='d_proj for q, k, v projection. (64)')
 
     parser.add_argument('--d_ff', type=int, default=256,
@@ -344,7 +352,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=90,
+    parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
