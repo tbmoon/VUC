@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.optim import lr_scheduler
 #from center_loss import CenterLoss
 from data_loader import YouTubeDataset, get_dataloader
-from models import TransformerModel
+from models import BaseModel, TransformerModel
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -103,18 +103,23 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers)
 
-    model = TransformerModel(
-        n_layers=args.n_layers,
-        n_heads=args.n_heads,
-        rgb_feature_size=args.rgb_feature_size,
-        audio_feature_size=args.audio_feature_size,
-        d_model=args.d_model,
-        d_ff=args.d_ff,
-        d_proj=args.d_proj,
-        n_attns = args.n_attns,
-        num_classes=args.num_classes,
-        dropout=args.dropout)
-
+    if model_name == 'transformer':
+        model = TransformerModel(
+            n_layers=args.n_layers,
+            n_heads=args.n_heads,
+            rgb_feature_size=args.rgb_feature_size,
+            audio_feature_size=args.audio_feature_size,
+            d_model=args.d_model,
+            d_ff=args.d_ff,
+            d_proj=args.d_proj,
+            n_attns = args.n_attns,
+            num_classes=args.num_classes,
+            dropout=args.dropout)
+    elif model_name == 'base':
+        model = BaseModel(
+            rgb_feature_size=args.rgb_feature_size,
+            audio_feature_size=args.audio_feature_size,
+            num_classes=args.num_classes)
     model = model.to(device)
 
     #center_loss = CenterLoss(num_classes=args.num_classes, feat_dim=args.d_model, device=device)
@@ -185,7 +190,11 @@ def main(args):
                     # attn_idc: [batch_size, num_classes]
                     # attn_weights: [batch_size, seg_length, n_attns]
                     # conv_loss: []
-                    vid_probs, attn_idc, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
+                    if model_name == 'transformer':
+                        vid_probs, attn_idc, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
+                    elif model_name == 'base':
+                        vid_probs = model(frame_rgbs, frame_audios)
+                    
                     vid_label_loss = video_label_loss(vid_probs, vid_labels)
 
                     _, vid_preds = torch.topk(vid_probs, args.max_vid_label_length)
@@ -200,7 +209,10 @@ def main(args):
                     vid_labels = vid_labels[:, 1:]
                     vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
-                    total_loss = vid_label_loss / vid_label_size + conv_loss / batch_size
+                    if model_name == 'transformer':
+                        total_loss = vid_label_loss / vid_label_size + conv_loss / batch_size
+                    elif model_name == 'base':
+                        total_loss = vid_label_loss / vid_label_size
                     #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
 
                     if phase == 'train':
@@ -209,21 +221,26 @@ def main(args):
                         optimizer.step()
 
                 running_vid_label_loss += vid_label_loss.item()
-                running_conv_loss += conv_loss.item()
                 running_vid_label_corrects += vid_label_corrects.item()
                 #running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size
-                running_conv_size += batch_size
                 running_num_vid_labels += num_vid_labels.item()
+                if model_name == 'transformer':
+                    running_conv_loss += conv_loss.item()
+                    running_conv_size += batch_size
+                
                 #if args.which_challenge == 'xxx_challenge':
                 #    running_time_label_size += time_label_size.item()
                 #    running_time_loss += time_loss.item()
 
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
-            epoch_conv_loss = running_conv_loss / running_conv_size 
             #epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             #epoch_time_loss = 0.0
-            epoch_total_loss = epoch_vid_label_loss + epoch_conv_loss
+            if model_name == 'transformer':
+                epoch_conv_loss = running_conv_loss / running_conv_size 
+                epoch_total_loss = epoch_vid_label_loss + epoch_conv_loss
+            elif model_name == 'base':
+                epoch_total_loss = epoch_vid_label_loss
             #epoch_total_loss = epoch_vid_label_loss + epoch_vid_cent_loss
             epoch_vid_label_recall = running_vid_label_corrects / running_num_vid_labels
 
@@ -272,7 +289,10 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--load_model', type=bool, default=False,
+    parser.add_argument('--model_name', type=str, default='transformer',
+                        help='transformer, base.')
+    
+    parser.add_argument('--load_model', type=bool, default=True,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -324,7 +344,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=4,
+    parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
@@ -336,7 +356,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
 
-    parser.add_argument('--num_epochs', type=int, default=20,
+    parser.add_argument('--num_epochs', type=int, default=100,
                         help='the number of epochs. (100)')
 
     parser.add_argument('--batch_size', type=int, default=64,
