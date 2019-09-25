@@ -103,7 +103,7 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers)
 
-    if model_name == 'transformer':
+    if args.model_name == 'transformer':
         model = TransformerModel(
             n_layers=args.n_layers,
             n_heads=args.n_heads,
@@ -115,7 +115,7 @@ def main(args):
             n_attns = args.n_attns,
             num_classes=args.num_classes,
             dropout=args.dropout)
-    elif model_name == 'base':
+    elif args.model_name == 'base':
         model = BaseModel(
             rgb_feature_size=args.rgb_feature_size,
             audio_feature_size=args.audio_feature_size,
@@ -190,9 +190,9 @@ def main(args):
                     # attn_idc: [batch_size, num_classes]
                     # attn_weights: [batch_size, seg_length, n_attns]
                     # conv_loss: []
-                    if model_name == 'transformer':
+                    if args.model_name == 'transformer':
                         vid_probs, attn_idc, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
-                    elif model_name == 'base':
+                    elif args.model_name == 'base':
                         vid_probs = model(frame_rgbs, frame_audios)
                     
                     vid_label_loss = video_label_loss(vid_probs, vid_labels)
@@ -209,9 +209,9 @@ def main(args):
                     vid_labels = vid_labels[:, 1:]
                     vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
-                    if model_name == 'transformer':
+                    if args.model_name == 'transformer':
                         total_loss = vid_label_loss / vid_label_size + conv_loss / batch_size
-                    elif model_name == 'base':
+                    elif args.model_name == 'base':
                         total_loss = vid_label_loss / vid_label_size
                     #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
 
@@ -225,7 +225,7 @@ def main(args):
                 #running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size
                 running_num_vid_labels += num_vid_labels.item()
-                if model_name == 'transformer':
+                if args.model_name == 'transformer':
                     running_conv_loss += conv_loss.item()
                     running_conv_size += batch_size
                 
@@ -236,10 +236,10 @@ def main(args):
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
             #epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             #epoch_time_loss = 0.0
-            if model_name == 'transformer':
+            if args.model_name == 'transformer':
                 epoch_conv_loss = running_conv_loss / running_conv_size 
                 epoch_total_loss = epoch_vid_label_loss + epoch_conv_loss
-            elif model_name == 'base':
+            elif args.model_name == 'base':
                 epoch_total_loss = epoch_vid_label_loss
             #epoch_total_loss = epoch_vid_label_loss + epoch_vid_cent_loss
             epoch_vid_label_recall = running_vid_label_corrects / running_num_vid_labels
@@ -292,7 +292,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_name', type=str, default='transformer',
                         help='transformer, base.')
     
-    parser.add_argument('--load_model', type=bool, default=True,
+    parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -344,7 +344,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=90,
                         help='period of learning rate decay. (10)')
 
     parser.add_argument('--gamma', type=float, default=0.1,
