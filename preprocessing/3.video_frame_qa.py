@@ -45,7 +45,7 @@ for data_type in data_types:
             break
         if (challenge == '2nd_challenge'):
             assert(data_type == 'train' or data_type == 'valid')
-            if (frame_rgb_len <= 30 or vid_label_len == 0 or frame_rgb_len >= 302):
+            if (frame_rgb_len <= 10 or vid_label_len == 0):
                 shutil.move(file_path, bad_frame_dir)
             else:
                 if max_vid_label_len < vid_label_len:
