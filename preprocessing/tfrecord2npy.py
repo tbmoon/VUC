@@ -5,6 +5,7 @@ import glob
 import argparse
 import tensorflow as tf
 import torch
+from torchvision import transforms
 
 
 def main(args):
@@ -77,7 +78,6 @@ def main(args):
                     data_record = sess.run(next_element)
                     dataset = dict()
                     dataset['video_id'] = data_record[0].decode()
-                    dataset['frame_rgb'] = torch.from_numpy(data_record[6])
                     dataset['frame_audio'] = torch.from_numpy(data_record[7])
 
                     raw_seg_times_list = list(data_record[3].values)
@@ -107,7 +107,12 @@ def main(args):
                         dataset['segment_times'] = torch.tensor(seg_times_list)
                         dataset['segment_labels'] = torch.tensor(seg_labels_list)
                         dataset['video_labels'] = torch.tensor(list(set(vid_labels_list)))
+
+                    frame_rgb_img = torch.from_numpy(data_record[6])
+                    frame_rgb_img = transforms.ToPILImage()(frame_rgb_img)
+
                     torch.save(dataset, output_dir + dataset['video_id'] + '.pt')
+                    frame_rgb_img.save(output_dir + dataset['video_id'] + '.png')
             except:
                 pass
 
