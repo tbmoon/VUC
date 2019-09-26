@@ -30,23 +30,23 @@ class YouTubeDataset(data.Dataset):
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
-        data = np.load(self.input_dir + self.df['id'][idx], allow_pickle=True).item()
-        frame_rgb = torch.from_numpy(np.array(data['frame_rgb'][:self.max_frame_length])).float()
-        frame_audio = torch.from_numpy(np.array(data['frame_audio'][:self.max_frame_length])).float()
+        data = torch.load(self.input_dir + self.df['id'][idx])
+        frame_rgb = data['frame_rgb'][:self.max_frame_length].float()
+        frame_audio = data['frame_audio'][:self.max_frame_length].float()
 
         # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
         offset = 4./512
         frame_rgb = frame_rgb - offset
         frame_rgb = frame_rgb * torch.from_numpy(self.pca)
 
+        vid_label = torch.LongTensor([0])
+        seg_label = torch.LongTensor([0])
+        seg_time = torch.LongTensor([0])
         if self.load_labels == True:
-            vid_label = random.sample(data['video_labels'], len(data['video_labels']))
-            vid_label = torch.from_numpy(np.array(vid_label))
-            seg_label = torch.LongTensor([0])
-            seg_time = torch.LongTensor([0])
+            vid_label = data['video_labels']
             if self.which_challenge == '3rd_challenge':
-                seg_label = torch.from_numpy(np.array(data['segment_labels']))
-                seg_time = torch.from_numpy(np.array(data['segment_times']))
+                seg_label = data['segment_labels']
+                seg_time = data['segment_times']
 
         return (frame_rgb,
                 frame_audio,
