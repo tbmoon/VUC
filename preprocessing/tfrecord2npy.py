@@ -4,6 +4,7 @@ import pandas as pd
 import glob
 import argparse
 import tensorflow as tf
+import torch
 
 
 def main(args):
@@ -76,8 +77,8 @@ def main(args):
                     data_record = sess.run(next_element)
                     dataset = dict()
                     dataset['video_id'] = data_record[0].decode()
-                    dataset['frame_rgb'] = list(data_record[6])
-                    dataset['frame_audio'] = list(data_record[7])
+                    dataset['frame_rgb'] = torch.from_numpy(data_record[6])
+                    dataset['frame_audio'] = torch.from_numpy(data_record[7])
 
                     raw_seg_times_list = list(data_record[3].values)
                     raw_seg_labels_list = list(data_record[4].values)
@@ -95,18 +96,17 @@ def main(args):
                             raw_seg_labels_list[i] = vocab_label2idx_dict[seg_label] 
 
                         seg_times_list = \
-                            [time / 5 for time, score 
+                            [time // 5 for time, score 
                              in zip(raw_seg_times_list, raw_seg_scores_list) if score == 1]
                         seg_labels_list = \
                             [label for label, score 
                              in zip(raw_seg_labels_list, raw_seg_scores_list) if score == 1]
                         vid_labels_list = seg_labels_list
 
-                        dataset['segment_times'] = seg_times_list
-                        dataset['segment_labels'] = seg_labels_list
-                        dataset['video_labels'] = list(set(vid_labels_list))
-
-                    np.save(output_dir + dataset['video_id'] + '.npy', np.array(dataset))
+                        dataset['segment_times'] = torch.tensor(seg_times_list)
+                        dataset['segment_labels'] = torch.tensor(seg_labels_list)
+                        dataset['video_labels'] = torch.tensor(list(set(vid_labels_list)))
+                    torch.save(dataset, output_dir + dataset['video_id'] + '.pt')
             except:
                 pass
 
