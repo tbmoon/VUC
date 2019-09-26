@@ -7,7 +7,7 @@
 * 3rd challenge:
     - Max video label length: 4
     - Max segment label length: 15
-    - The number of files (valid): 47,087 -> 38,788
+    - The number of files (valid): 47,087 -> 38,785
     - The number of files (test): 44,753 -> 44,739
 '''
 
@@ -15,6 +15,7 @@ import os
 import numpy as np
 import glob
 import shutil
+import torch
 
 # data_types = ['train', 'valid', 'test']
 # challenge = '2nd_challenge' / '3rd_challenge'
@@ -30,13 +31,17 @@ for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
     bad_frame_dir = data_dir + '{}/bad_datasets/{}/'.format(challenge, data_type)
     os.makedirs(bad_frame_dir, exist_ok=True)
-    file_paths = glob.glob(frame_dir + '*.npy')
+    file_paths = glob.glob(frame_dir + '*.pt')
 
     print('The number of files:', len(file_paths))
     for i, file_path in enumerate (file_paths):
         if i % 10000 == 0:
             print(data_type, i)
-        data = np.load(file_path, allow_pickle=True).item()
+        try :
+            data = torch.load(file_path)
+        except:
+            shutil.move(file_path, bad_frame_dir)
+            pass
         frame_rgb_len = len(data['frame_rgb'])
         frame_audio_len = len(data['frame_audio'])
         vid_label_len = len(data['video_labels'])
