@@ -42,15 +42,11 @@ for data_type in data_types:
         except:
             shutil.move(file_path, bad_frame_dir)
             pass
-        frame_rgb_len = len(data['frame_rgb'])
-        frame_audio_len = len(data['frame_audio'])
+        frame_len = data['frame_length']
         vid_label_len = len(data['video_labels'])
-        if (frame_rgb_len != frame_audio_len):
-            print('(ERROR) - check if frame length is correct or not!')
-            break
         if (challenge == '2nd_challenge'):
             assert(data_type == 'train' or data_type == 'valid')
-            if (frame_rgb_len <= 10 or vid_label_len == 0):
+            if (frame_len <= 10 or vid_label_len == 0):
                 shutil.move(file_path, bad_frame_dir)
             else:
                 if max_vid_label_len < vid_label_len:
@@ -60,7 +56,7 @@ for data_type in data_types:
             assert(data_type == 'valid' or data_type == 'test')
             if (data_type == 'valid'):
                 max_seg_start_times = 0 if vid_label_len == 0 else max(data['segment_times'] * 5)
-                if (frame_rgb_len <= 10 or vid_label_len == 0 or frame_rgb_len < max_seg_start_times):
+                if (frame_len <= 10 or vid_label_len == 0 or frame_len < max_seg_start_times):
                     shutil.move(file_path, bad_frame_dir)
                 else:
                     if max_vid_label_len < vid_label_len:
@@ -68,7 +64,7 @@ for data_type in data_types:
                     if max_seg_label_len < seg_label_len:
                         max_seg_label_len = seg_label_len
             else:
-                if (frame_rgb_len <= 10):
+                if (frame_len <= 10):
                     shutil.move(file_path, bad_frame_dir)
 
 print("Max video label length:", max_vid_label_len)
