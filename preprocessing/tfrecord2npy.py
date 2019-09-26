@@ -91,6 +91,7 @@ def main(args):
                             if vid_label in vocab_label2idx_dict:
                                 vid_idx = vocab_label2idx_dict[vid_label]
                                 dataset['video_labels'].append(vid_idx)
+                        dataset['video_labels'] = torch.tensor(dataset['video_labels'])
                     else:
                         for i, seg_label in enumerate(raw_seg_labels_list):
                             raw_seg_labels_list[i] = vocab_label2idx_dict[seg_label] 
