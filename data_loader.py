@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.utils.data as data
+from skimage import io, transform
 
 
 class YouTubeDataset(data.Dataset):
@@ -30,8 +31,10 @@ class YouTubeDataset(data.Dataset):
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
-        data = torch.load(self.input_dir + self.df['id'][idx])
-        frame_rgb = data['frame_rgb'][:self.max_frame_length].float()
+        frame_rgb = io.imread(self.input_dir + self.df['id'][idx] + '.png')
+        frame_rgb = torch.from_numpy(frame_rgb)[:self.max_frame_length].float()
+
+        data = torch.load(self.input_dir + self.df['id'][idx] + '.pt')
         frame_audio = data['frame_audio'][:self.max_frame_length].float()
 
         # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
