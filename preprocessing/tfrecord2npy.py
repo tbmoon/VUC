@@ -78,7 +78,8 @@ def main(args):
                     data_record = sess.run(next_element)
                     dataset = dict()
                     dataset['video_id'] = data_record[0].decode()
-                    dataset['frame_length'] = torch.tensor(len(data_record[6]))
+                    dataset['frame_rgb'] = torch.from_numpy(data_record[6])
+                    dataset['frame_audio'] = torch.from_numpy(data_record[7])
 
                     raw_seg_times_list = list(data_record[3].values)
                     raw_seg_labels_list = list(data_record[4].values)
@@ -108,14 +109,7 @@ def main(args):
                         dataset['segment_labels'] = torch.tensor(seg_labels_list)
                         dataset['video_labels'] = torch.tensor(list(set(vid_labels_list)))
 
-                    frame_rgb_img = torch.from_numpy(data_record[6])
-                    frame_rgb_img = transforms.ToPILImage()(frame_rgb_img)
-                    frame_audio_img = torch.from_numpy(data_record[7])
-                    frame_audio_img = transforms.ToPILImage()(frame_audio_img)
-
                     torch.save(dataset, output_dir + dataset['video_id'] + '.pt')
-                    frame_rgb_img.save(output_dir + dataset['video_id'] + '1.png')
-                    frame_audio_img.save(output_dir + dataset['video_id'] + '2.png')
             except:
                 pass
 
@@ -131,7 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--base_dir', type=str, default='/run/media/hoosiki/WareHouse3/mtb/datasets/VU/',
                         help='base directory for input and output files.')
 
-    parser.add_argument('--out_dir', type=str, default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/',
+    parser.add_argument('--out_dir', type=str, default='/home/mtb/repository/',
                         help='output directory for input and output files.')
 
     parser.add_argument('--data_type', type=str, default='valid',
