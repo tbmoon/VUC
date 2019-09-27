@@ -31,17 +31,14 @@ class YouTubeDataset(data.Dataset):
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
-        frame_rgb = io.imread(self.input_dir + self.df['id'][idx] + '1.png')
-        frame_rgb = torch.from_numpy(frame_rgb)[:self.max_frame_length].float()
-        frame_audio = io.imread(self.input_dir + self.df['id'][idx] + '2.png')
-        frame_audio = torch.from_numpy(frame_audio)[:self.max_frame_length].float()
+        data = torch.load(self.input_dir + self.df['id'][idx] + '.pt')
+        frame_rgb = data['frame_rgb'][:self.max_frame_length].float()
+        frame_audio = data['frame_audio'][:self.max_frame_length].float()
 
         # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
         offset = 4./512
         frame_rgb = frame_rgb - offset
         frame_rgb = frame_rgb * torch.from_numpy(self.pca)
-
-        data = torch.load(self.input_dir + self.df['id'][idx] + '.pt')
 
         vid_label = torch.LongTensor([0])
         seg_label = torch.LongTensor([0])

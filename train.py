@@ -279,7 +279,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/',
+                        default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
     parser.add_argument('--log_dir', type=str, default='./logs',
@@ -367,7 +367,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=100,
                         help='the number of epochs. (100)')
 
-    parser.add_argument('--batch_size', type=int, default=256,
+    parser.add_argument('--batch_size', type=int, default=128,
                         help='batch_size. (64) / (256)')
 
     parser.add_argument('--num_workers', type=int, default=16,
