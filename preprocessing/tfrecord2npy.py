@@ -122,7 +122,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--base_dir', type=str, default='/run/media/hoosiki/WareHouse3/mtb/datasets/VU/',
+    parser.add_argument('--base_dir', type=str, default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/',
                         help='base directory for input and output files.')
 
     parser.add_argument('--out_dir', type=str, default='/home/mtb/repository/',
