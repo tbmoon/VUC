@@ -154,7 +154,6 @@ def main(args):
             running_num_vid_labels = 0
 
             if phase == 'train':
-                scheduler.step()
                 model.train()
             else:
                 model.eval()
@@ -271,6 +270,7 @@ def main(args):
             time_elapsed = time.time() - since
             print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
                   .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
+        scheduler.step()
         print()
 
 
