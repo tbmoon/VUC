@@ -35,12 +35,12 @@ def video_label_loss(probs, labels):
     # probs: [batch_size, num_classes]
     probs = torch.where(is_selected == 1, probs, 1 - probs)
 
-    # Use balanced (cross-entropy / focal) loss.
     unselected_weight = is_selected.sum(dim=1).view(-1, 1).float()  # unselected_weight: [batch_size, 1]
     selected_weight = num_classes - unselected_weight               # selected_weight: [batch_size, 1]
 
     loss = -1 * (1 - probs)**args.focal_loss_gamma * torch.log(probs + eps)
-    loss = torch.where(is_selected == 1, selected_weight * loss, unselected_weight * loss)
+    # Use balanced (cross-entropy / focal) loss.
+    #loss = torch.where(is_selected == 1, selected_weight * loss, unselected_weight * loss)
     loss = loss.sum()
     return loss
 
@@ -352,10 +352,10 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=5,
+    parser.add_argument('--step_size', type=int, default=7,
                         help='period of learning rate decay. (5)')
 
-    parser.add_argument('--gamma', type=float, default=0.1,
+    parser.add_argument('--gamma', type=float, default=0.5,
                         help='multiplicative factor of learning rate decay. (0.1)')
 
     parser.add_argument('--focal_loss_gamma', type=int, default=0,
