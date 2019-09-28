@@ -263,7 +263,7 @@ def main(args):
             # Save the model check points.
             if phase == 'train' and (epoch+1) % args.save_step == 0:
                 torch.save({'epoch': epoch+1,
-                            'model_state_dict': model.state_dict()},
+                            'state_dict': model.state_dict()},
                            os.path.join(os.getcwd(), 'models/model-epoch-{:02d}.ckpt'.format(epoch+1)))
             time_elapsed = time.time() - since
             print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
