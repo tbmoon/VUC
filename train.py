@@ -251,7 +251,7 @@ def main(args):
             print('\t*- Total Loss        : {:.4f}'.format(epoch_total_loss))
             print('\t*- Video Label Loss  : {:.4f}'.format(epoch_vid_label_loss))
             if args.use_conv_loss == True:
-                sprint('\t*- Conv Loss         : {:.4f}'.format(epoch_conv_loss))
+                print('\t*- Conv Loss         : {:.4f}'.format(epoch_conv_loss))
             print('\t*- Video Label Recall: {:.4f}'.format(epoch_vid_label_recall))
 
             # Log the loss in an epoch.
