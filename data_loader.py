@@ -18,10 +18,12 @@ class YouTubeDataset(data.Dataset):
                  max_seg_label_length=15,
                  rgb_feature_size=1024,
                  audio_feature_size=128):
-        self.input_dir = input_dir + which_challenge + \
-            '/{}'.format(phase if which_challenge == '2nd_challenge' else 'valid') + '/'
-        self.df = pd.read_csv(input_dir + which_challenge + '/' + phase + '.csv')
-        self.pca = np.sqrt(np.load(input_dir + '../yt8m_pca/eigenvals.npy')[:1024, 0]) + 1e-4
+        self.input_dir = os.path.join(
+            input_dir,
+            which_challenge,
+            '{}'.format(phase if which_challenge == '2nd_challenge' else 'valid'))
+        self.df = pd.read_csv(os.path.join(input_dir, which_challenge, phase + '.csv'))
+        self.pca = np.sqrt(np.load(os.path.join(input_dir, '../yt8m_pca/eigenvals.npy'))[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
         self.max_frame_length = max_frame_length
         self.max_vid_label_length = max_vid_label_length
@@ -31,7 +33,7 @@ class YouTubeDataset(data.Dataset):
         self.load_labels = True if phase is not 'test' else False
 
     def __getitem__(self, idx):
-        data = torch.load(self.input_dir + self.df['id'][idx] + '.pt')
+        data = torch.load(os.path.join(self.input_dir, self.df['id'][idx] + '.pt'))
         frame_rgb = data['frame_rgb'][:self.max_frame_length].float()
         frame_audio = data['frame_audio'][:self.max_frame_length].float()
 
@@ -106,7 +108,9 @@ def collate_fn(data):
     # max_frame_lengths: tuple of max_frame_length.
     # max_vid_label_lengths: tuple of max_vid_label_length.
     # max_seg_label_lengths: tuple of max_seg_label_length.
-    frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times, max_frame_lengths, max_vid_label_lengths, max_seg_label_lengths = zip(*data)
+    frame_rgbs, frame_audios, vid_labels, \
+    seg_labels, seg_times, max_frame_lengths, \
+    max_vid_label_lengths, max_seg_label_lengths = zip(*data)
 
     batch_size = len(frame_rgbs)
     max_frame_len = max_frame_lengths[0]

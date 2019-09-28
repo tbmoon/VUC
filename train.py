@@ -35,11 +35,10 @@ def video_label_loss(probs, labels):
     # probs: [batch_size, num_classes]
     probs = torch.where(is_selected == 1, probs, 1 - probs)
 
-    unselected_weight = is_selected.sum(dim=1).view(-1, 1).float()  # unselected_weight: [batch_size, 1]
-    selected_weight = num_classes - unselected_weight               # selected_weight: [batch_size, 1]
-
     loss = -1 * (1 - probs)**args.focal_loss_gamma * torch.log(probs + eps)
-    # Use balanced (cross-entropy / focal) loss.
+    # If you want to use balanced loss, comment in below.
+    #unselected_weight = is_selected.sum(dim=1).view(-1, 1).float()  # unselected_weight: [batch_size, 1]
+    #selected_weight = num_classes - unselected_weight               # selected_weight: [batch_size, 1]
     #loss = torch.where(is_selected == 1, selected_weight * loss, unselected_weight * loss)
     loss = loss.sum()
     return loss
@@ -84,8 +83,8 @@ def binary_cross_entropy_loss_with_seg_label_processing(frame_lengths, selected_
 
 def main(args):
 
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
+    os.makedirs(os.path.join(os.getcwd(), 'models'), exist_ok=True)
 
     # the maximum length of video label in 2nd challenge: 18.
     # the maximum length of video label in 3rd challenge: 4.
@@ -133,8 +132,8 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(args.model_dir + '/model-epoch-pretrained.ckpt')
-        model.load_state_dict(checkpoint['model_state_dict'])
+        checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained.ckpt'))
+        model.load_state_dict(checkpoint['state_dict'])
 
     params = list(model.parameters()) #+ list(center_loss.parameters())
     optimizer = optim.Adam(params, lr=args.learning_rate)
@@ -255,7 +254,7 @@ def main(args):
             print('\t*- Video Label Recall: {:.4f}'.format(epoch_vid_label_recall))
 
             # Log the loss in an epoch.
-            with open(os.path.join(args.log_dir, '{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
+            with open(os.path.join(os.getcwd(), 'logs/{}-log-epoch-{:02}.txt').format(phase, epoch+1), 'w') as f:
                 f.write(str(epoch+1) + '\t' +
                         str(epoch_total_loss) + '\t' +
                         str(epoch_vid_label_loss) + '\t' +
@@ -265,7 +264,7 @@ def main(args):
             if phase == 'train' and (epoch+1) % args.save_step == 0:
                 torch.save({'epoch': epoch+1,
                             'model_state_dict': model.state_dict()},
-                           os.path.join(args.model_dir, 'model-epoch-{:02d}.ckpt'.format(epoch+1)))
+                           os.path.join(os.getcwd(), 'models/model-epoch-{:02d}.ckpt'.format(epoch+1)))
             time_elapsed = time.time() - since
             print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
                   .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
@@ -280,12 +279,6 @@ if __name__ == '__main__':
     parser.add_argument('--input_dir', type=str,
                         default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
-
-    parser.add_argument('--log_dir', type=str, default='./logs',
-                        help='directory for logs.')
-
-    parser.add_argument('--model_dir', type=str, default='./models',
-                        help='directory for saved models.')
 
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
