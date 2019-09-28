@@ -210,10 +210,9 @@ def main(args):
                     vid_labels = vid_labels[:, 1:]
                     vid_label_corrects = (vid_labels * vid_preds).sum().float()
 
-                    if args.model_name == 'transformer':
-                        total_loss = vid_label_loss / vid_label_size + conv_loss / batch_size
-                    elif args.model_name == 'base':
-                        total_loss = vid_label_loss / vid_label_size
+                    total_loss = vid_label_loss / vid_label_size
+                    if args.use_conv_loss == True:
+                        total_loss += conv_loss / batch_size
                     #total_loss = vid_label_loss / vid_label_size + vid_cent_loss / vid_label_size
 
                     if phase == 'train':
@@ -226,7 +225,7 @@ def main(args):
                 #running_vid_cent_loss += vid_cent_loss.item()
                 running_vid_label_size += vid_label_size
                 running_num_vid_labels += num_vid_labels.item()
-                if args.model_name == 'transformer':
+                if args.use_conv_loss == True:
                     running_conv_loss += conv_loss.item()
                     running_conv_size += batch_size
                 
@@ -237,11 +236,10 @@ def main(args):
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
             #epoch_vid_cent_loss = running_vid_cent_loss / running_vid_label_size
             #epoch_time_loss = 0.0
-            if args.model_name == 'transformer':
+            epoch_total_loss = epoch_vid_label_loss
+            if args.use_conv_loss == True:
                 epoch_conv_loss = running_conv_loss / running_conv_size 
-                epoch_total_loss = epoch_vid_label_loss + epoch_conv_loss
-            elif args.model_name == 'base':
-                epoch_total_loss = epoch_vid_label_loss
+                epoch_total_loss += epoch_conv_loss
             #epoch_total_loss = epoch_vid_label_loss + epoch_vid_cent_loss
             epoch_vid_label_recall = running_vid_label_corrects / running_num_vid_labels
 
@@ -252,7 +250,8 @@ def main(args):
             print('| {} SET | Epoch [{:02d}/{:02d}]'.format(phase.upper(), epoch+1, args.num_epochs))
             print('\t*- Total Loss        : {:.4f}'.format(epoch_total_loss))
             print('\t*- Video Label Loss  : {:.4f}'.format(epoch_vid_label_loss))
-            print('\t*- Conv Loss         : {:.4f}'.format(epoch_conv_loss))
+            if args.use_conv_loss == True:
+                sprint('\t*- Conv Loss         : {:.4f}'.format(epoch_conv_loss))
             print('\t*- Video Label Recall: {:.4f}'.format(epoch_vid_label_recall))
 
             # Log the loss in an epoch.
@@ -293,7 +292,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--model_name', type=str, default='transformer',
                         help='transformer, base.')
-    
+
+    parser.add_argument('--use_conv_loss', type=bool, default=True,
+                        help='use conv loss but it has not large effect.')
+
     parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
