@@ -229,21 +229,15 @@ def seg_attention(query, key, value, dropout=None):
     Compute 'Scaled Dot Product Attention'.
     '''
     # query, key, value: [batch_size, seg_length, d_proj]
-    # scores: [batch_size, seg_length]
-    # seg_attn: [batch_size, seg_length]
+    # score: [batch_size, seg_length]
     # p_attn: [batch_size, seg_length]
     d_proj = query.size(-1)
-    scores = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
-    p_attn = F.softmax(scores, dim=-1)
-    #seg_attn = torch.sigmoid(scores)
-    #p_attn = F.softmax(seg_attn, dim=-1)
-    #if dropout is not None:
-    #    p_attn = dropout(p_attn)
+    score = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
+    p_attn = F.softmax(score, dim=-1)
 
     # weighted_sum: [batch_size, seg_length, d_proj]
-    # seg_attn: [batch_size, seg_length]
     weighted_sum = p_attn.unsqueeze(2) * value
-    return weighted_sum, p_attn
+    return weighted_sum, score, p_attn
 
 
 class SegmentAttention(nn.Module):
@@ -263,6 +257,7 @@ class SegmentAttention(nn.Module):
             - value: [batch_size, seg_length, d_proj]
         outputs:
             - weighted_sum: [batch_size, 1, d_proj]
+            - score: [batch_size, seg_length]
             - attn_weight: [batch_size, seg_length]
         '''
         batch_size = query.size(0)
@@ -275,12 +270,12 @@ class SegmentAttention(nn.Module):
         # 2) Apply attention on all the projected vectors in batch.
         # weighted_sum: [batch_size, seg_length, d_proj]
         # attn_weight: [batch_size, seg_length]
-        weighted_sum, attn_weight = seg_attention(query, key, value, dropout=self.dropout)
+        weighted_sum, score, attn_weight = seg_attention(query, key, value, dropout=self.dropout)
 
         # 3) Apply element-wise summation w.r.t. seg_length.
         # weighted_sum: [batch_size, 1, d_proj]
         weighted_sum = torch.sum(weighted_sum, dim=1, keepdim=True)
-        return weighted_sum, attn_weight
+        return weighted_sum, score, attn_weight
 
 
 class Classifier(nn.Module):
@@ -308,22 +303,27 @@ class Classifier(nn.Module):
         outputs:
             - vid_probs: [batch_size, num_classes]
             - attn_idc: [batch_size, num_classes]
+            - scores: [batch_size, seg_length, n_attns]
             - attn_weights: [batch_size, seg_length, n_attns]
             - conv_loss: []
         '''
         batch_size = seg_features.size(0)
         vid_logits = torch.Tensor().to(device)
+        scores = torch.Tensor().to(device)
         attn_weights = torch.Tensor().to(device)
         seg_keys = self.key(seg_features)                                 # seg_keys: [batch_size, seg_length, d_proj] 
         seg_values = self.value(seg_features)                             # seg_values: [batch_size, seg_length, d_proj]
         for seg_attn in self.seg_attns:
             # vid_feature: [batch_size, 1, d_proj]
+            # score: [batch_size, seg_length]
             # attn_weight: [batch_size, seg_length]
-            vid_feature, attn_weight = seg_attn(seg_features, seg_keys, seg_values)
+            vid_feature, score, attn_weight = seg_attn(seg_features, seg_keys, seg_values)
             vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))    # vid_logit: [batch_size, num_classes, 1]
             vid_logit = self.norm(vid_logit.squeeze(2)).unsqueeze(2)
             vid_logits = torch.cat((vid_logits, vid_logit), dim=2)        # vid_logits: [batch_size, num_classes, n_attns]
+            score = score.unsqueeze(2)                                    # score: [batch_size, seg_length, 1]
             attn_weight = attn_weight.unsqueeze(2)                        # attn_weight: [batch_size, seg_length, 1]
+            scores = torch.cat((scores, score), dim=2)                    # scores: [batch_size, seg_length, n_attns]
             attn_weights = torch.cat((attn_weights, attn_weight), dim=2)  # attn_weights: [batch_size, seg_length, n_attns]
             
         # Do "maxpool1d" using torch.max for max logits and indice.
@@ -335,7 +335,7 @@ class Classifier(nn.Module):
         conv_pars = F.softmax(conv_pars, dim=1)
         conv_loss = conv_pars.std(1, keepdim=False)                       # conv_loss: [batch_size]
         conv_loss = conv_loss.clamp(min=1e-9, max=1e+9).sum(dim=0)        # conv_loss: []
-        return vid_probs, attn_idc, attn_weights, conv_loss
+        return vid_probs, attn_idc, scores, attn_weights, conv_loss
 
 
 class TransformerModel(nn.Module):
@@ -387,8 +387,8 @@ class TransformerModel(nn.Module):
         frame_features = self.position(frame_features)
         frame_features = self.encoder(frame_features)
         seg_features = self.frame2seg(frame_features)       # seg_features: [batch_size, seg_length=60, d_model]
-        vid_probs, attn_idc, attn_weights, conv_loss = self.classifier(seg_features, device)
-        return vid_probs, attn_idc, attn_weights, conv_loss
+        vid_probs, attn_idc, scores, attn_weights, conv_loss = self.classifier(seg_features, device)
+        return vid_probs, attn_idc, scores, attn_weights, conv_loss
 
 
 class BaseModel(nn.Module):

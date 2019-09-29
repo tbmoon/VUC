@@ -191,7 +191,7 @@ def main(args):
                     # attn_weights: [batch_size, seg_length, n_attns]
                     # conv_loss: []
                     if args.model_name == 'transformer':
-                        vid_probs, attn_idc, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
+                        vid_probs, attn_idc, scores, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
                     elif args.model_name == 'base':
                         vid_probs = model(frame_rgbs, frame_audios)
                     
