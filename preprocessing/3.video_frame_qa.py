@@ -29,7 +29,7 @@ max_vid_label_len = 0
 max_seg_label_len = 0
 for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
-    bad_frame_dir = data_dir + '{}/bad_datasets/{}/'.format(challenge, data_type)
+    bad_frame_dir = '/run/media/hoosiki/WareHouse2/mtb/datasets/bad_datasets/{}/'.format(challenge, data_type)
     os.makedirs(bad_frame_dir, exist_ok=True)
     file_paths = glob.glob(frame_dir + '*.pt')
 
