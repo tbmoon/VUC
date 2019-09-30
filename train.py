@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.optim import lr_scheduler
 #from center_loss import CenterLoss
 from data_loader import YouTubeDataset, get_dataloader
-from models import BaseModel, TransformerModel
+from models import BaseModel, TransformerModel, TransformerModel_V2
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -103,7 +103,7 @@ def main(args):
         num_workers=args.num_workers)
 
     if args.model_name == 'transformer':
-        model = TransformerModel(
+        model = TransformerModel_V2(
             n_layers=args.n_layers,
             n_heads=args.n_heads,
             rgb_feature_size=args.rgb_feature_size,
