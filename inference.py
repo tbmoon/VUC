@@ -43,7 +43,7 @@ def main(args):
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    pca = np.sqrt(np.load(os.path.join(args.input_dir, '../yt8m_pca/eigenvals.npy'))[:1024, 0]) + 1e-4
+    pca = np.sqrt(np.load(os.path.join(args.input_dir, '../../yt8m_pca/eigenvals.npy'))[:1024, 0]) + 1e-4
 
     df_input = pd.read_csv(os.path.join(args.input_dir, 'test.csv'))
     
@@ -124,14 +124,12 @@ def main(args):
         if args.print == True:
             print("vid_id", vid_id)
             print("vid_labels:", vid_labels.numpy())
-            print("vid_label_preds:", vid_label_preds)
+            print("vid_label_preds:", vid_label_preds, "\n")
             print()
             print("seg_labels:", seg_labels.numpy())
             print("seg_times :", seg_times.numpy())
             print("seg_time_preds:", seg_time_preds)
-            print("seg_scores:", seg_scores)
-            print()
-            print()
+            print("seg_scores:", seg_scores, "\n\n")
         
 
 if __name__ == '__main__':
