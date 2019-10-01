@@ -445,6 +445,61 @@ class TransformerModel_V2(nn.Module):
         vid_probs, attn_idc, scores, attn_weights, conv_loss = self.classifier(frame_features, device)
         return vid_probs, attn_idc, scores, attn_weights, conv_loss
 
+    
+class GRUModel(nn.Module):
+    '''
+    Implement model based on the GRU.
+    '''
+    def __init__(self, n_layers, rgb_feature_size, audio_feature_size,
+                 d_rgb, d_audio, d_model, d_proj,
+                 n_attns, num_classes, dropout):
+        super(GRUModel, self).__init__()
+        c = copy.deepcopy
+        self.d_model = d_model
+        self.frame2seg = Frame2Segment()
+        self.rgb_dense = nn.Linear(rgb_feature_size, d_rgb)
+        self.audio_dense = nn.Linear(audio_feature_size, d_audio)
+        self.rgb_dense_bn = nn.BatchNorm1d(d_rgb)
+        self.audio_dense_bn = nn.BatchNorm1d(d_audio)
+        self.dropout = nn.Dropout(dropout)
+        self.gru = nn.GRU(d_rgb + d_audio, d_model)
+        self.classifier = Classifier(d_model, d_proj, n_attns, num_classes, dropout)
+
+    def forward(self, padded_frame_rgbs, padded_frame_audios, device):
+        '''
+        inputs:
+            - padded_frame_rgbs: [batch_size, frame_length, rgb_feature_size]
+            - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
+        outputs:
+            - vid_probs: [batch_size, num_classes]
+            - attn_idc: [batch_size, num_classes]
+            - attn_weights: [batch_size, seg_length, n_attns]
+            - conv_loss: []
+        '''
+        seg_rgbs = self.frame2seg(padded_frame_rgbs)      # seg_rgbs: [batch_size, seg_length=60, rgb_feature_size]
+        seg_audios = self.frame2seg(padded_frame_audios)  # seg_audios: [batch_size, seg_length=60, audio_feature_size]
+
+        # seg_rgbs: [batch_size, d_rgb, seg_length]
+        seg_rgbs = self.rgb_dense(seg_rgbs).transpose(1, 2)
+        # seg_rgb: [batch_size, seg_length, d_rgb]
+        seg_rgbs = self.dropout(F.relu(self.rgb_dense_bn(seg_rgbs).transpose(1, 2)))
+        # seg_audios: [batch_size, d_audio, seg_length]
+        seg_audios = self.audio_dense(seg_audios).transpose(1, 2)
+        # seg_audios: [batch_size, seg_length, d_audio]
+        seg_audios = self.dropout(F.relu(self.audio_dense_bn(seg_audios).transpose(1, 2)))
+
+        # seg_features: [batch_size, seg_length, d_rgb + d_audio]
+        seg_features = torch.cat((seg_rgbs, seg_audios), 2)
+        # seg_features: [seg_length, batch_size, d_rgb + d_audio]
+        seg_features = seg_features.transpose(0, 1)
+        # seg_features: [seg_length, batch_size, d_model]
+        seg_features, _ = self.gru(seg_features)
+        # seg_features: [batch_size, seg_length, d_model]
+        seg_features = seg_features.transpose(0, 1)
+
+        vid_probs, attn_idc, scores, attn_weights, conv_loss = self.classifier(seg_features, device)
+        return vid_probs, attn_idc, scores, attn_weights, conv_loss
+
 
 class BaseModel(nn.Module):
     '''

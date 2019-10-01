@@ -9,7 +9,9 @@ import torch.nn.functional as F
 from torch.optim import lr_scheduler
 #from center_loss import CenterLoss
 from data_loader import YouTubeDataset, get_dataloader
-from models import BaseModel, TransformerModel, TransformerModel_V2
+from models import BaseModel
+from models import GRUModel
+from models import TransformerModel, TransformerModel_V2
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -116,6 +118,18 @@ def main(args):
             n_attns = args.n_attns,
             num_classes=args.num_classes,
             dropout=args.dropout)
+    elif args.model_name == 'gru':
+        model = GRUModel(
+            n_layers=args.n_layers,
+            rgb_feature_size=args.rgb_feature_size,
+            audio_feature_size=args.audio_feature_size,
+            d_rgb=args.d_rgb,
+            d_audio=args.d_audio,
+            d_model=args.d_model,
+            d_proj=args.d_proj,
+            n_attns = args.n_attns,
+            num_classes=args.num_classes,
+            dropout=args.dropout)
     elif args.model_name == 'base':
         model = BaseModel(
             rgb_feature_size=args.rgb_feature_size,
@@ -191,6 +205,9 @@ def main(args):
                     # attn_weights: [batch_size, seg_length, n_attns]
                     # conv_loss: []
                     if args.model_name == 'transformer':
+                        vid_probs, attn_idc, scores, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
+                    if args.model_name == 'gru':
+                        #hidden = model.initHidden(device)
                         vid_probs, attn_idc, scores, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
                     elif args.model_name == 'base':
                         vid_probs = model(frame_rgbs, frame_audios)
