@@ -318,7 +318,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/',
+                        default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
     parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
