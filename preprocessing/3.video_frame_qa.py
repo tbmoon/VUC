@@ -26,6 +26,7 @@ challenge = '2nd_challenge'
 data_dir = '/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/'
 
 max_vid_label_len = 0
+max_vid_seg_label_len = 0
 max_seg_label_len = 0
 for data_type in data_types:
     frame_dir = data_dir + '{}/{}/'.format(challenge, data_type)
@@ -49,15 +50,18 @@ for data_type in data_types:
                     if max_vid_label_len < vid_label_len:
                         max_vid_label_len = vid_label_len
             else:
+                vid_seg_label_len = len(data['video_segment_labels'])
                 seg_label_len = len(data['segment_labels'])
                 assert(data_type == 'valid' or data_type == 'test')
                 if (data_type == 'valid'):
-                    max_seg_start_times = 0 if vid_label_len == 0 else max(data['segment_times'] * 5)
-                    if (frame_len <= 10 or vid_label_len == 0 or frame_len < max_seg_start_times):
+                    max_seg_start_times = 0 if vid_seg_label_len == 0 else max(data['segment_times'] * 5)
+                    if (frame_len <= 10 or vid_seg_label_len == 0 or frame_len < max_seg_start_times):
                         shutil.move(file_path, bad_frame_dir)
                     else:
                         if max_vid_label_len < vid_label_len:
                             max_vid_label_len = vid_label_len
+                        if max_vid_seg_label_len < vid_seg_label_len:
+                            max_vid_seg_label_len = vid_seg_label_len
                         if max_seg_label_len < seg_label_len:
                             max_seg_label_len = seg_label_len
                 else:
@@ -67,5 +71,6 @@ for data_type in data_types:
             shutil.move(file_path, bad_frame_dir)
 
 print("Max video label length:", max_vid_label_len)
+print("Max video-segment label length:", max_vid_seg_label_len)
 print("Max segment label length:", max_seg_label_len)
 print("Done!")

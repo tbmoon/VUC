@@ -85,15 +85,15 @@ def main(args):
                     raw_seg_labels_list = list(data_record[4].values)
                     raw_seg_scores_list = list(data_record[5].values)
 
-                    if args.which_challenge == '2nd_challenge':
-                        dataset['video_labels'] = list()
-                        vid_labels_list = list(data_record[1].values)
-                        for i, vid_label in enumerate(vid_labels_list):
-                            if vid_label in vocab_label2idx_dict:
-                                vid_idx = vocab_label2idx_dict[vid_label]
-                                dataset['video_labels'].append(vid_idx)
-                        dataset['video_labels'] = torch.tensor(dataset['video_labels'])
-                    else:
+                    dataset['video_labels'] = list()
+                    vid_labels_list = list(data_record[1].values)
+                    for i, vid_label in enumerate(vid_labels_list):
+                        if vid_label in vocab_label2idx_dict:
+                            vid_idx = vocab_label2idx_dict[vid_label]
+                            dataset['video_labels'].append(vid_idx)
+                    dataset['video_labels'] = torch.tensor(dataset['video_labels'])
+
+                    if args.which_challenge == '3rd_challenge':
                         for i, seg_label in enumerate(raw_seg_labels_list):
                             raw_seg_labels_list[i] = vocab_label2idx_dict[seg_label] 
 
@@ -103,11 +103,11 @@ def main(args):
                         seg_labels_list = \
                             [label for label, score 
                              in zip(raw_seg_labels_list, raw_seg_scores_list) if score == 1]
-                        vid_labels_list = seg_labels_list
+                        vid_seg_labels_list = seg_labels_list
 
                         dataset['segment_times'] = torch.tensor(seg_times_list)
                         dataset['segment_labels'] = torch.tensor(seg_labels_list)
-                        dataset['video_labels'] = torch.tensor(list(set(vid_labels_list)))
+                        dataset['video_segment_labels'] = torch.tensor(list(set(vid_seg_labels_list)))
 
                     torch.save(dataset, output_dir + dataset['video_id'] + '.pt')
             except:
