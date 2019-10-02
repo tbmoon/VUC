@@ -48,6 +48,7 @@ class YouTubeDataset(data.Dataset):
         if self.load_labels == True:
             vid_label = data['video_labels']
             if self.which_challenge == '3rd_challenge':
+                vid_label = data['vid_segment_labels']
                 seg_label = data['segment_labels']
                 seg_time = data['segment_times']
 
