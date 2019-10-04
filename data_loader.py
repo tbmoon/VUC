@@ -21,7 +21,7 @@ class YouTubeDataset(data.Dataset):
         self.input_dir = os.path.join(
             input_dir,
             which_challenge,
-            '{}'.format(phase if which_challenge == '2nd_challenge' else 'valid'))
+            '{}'.format('valid' if which_challenge == '3rd_challenge' and phase == 'train' else phase))
         self.df = pd.read_csv(os.path.join(input_dir, which_challenge, phase + '.csv'))
         self.pca = np.sqrt(np.load(os.path.join(input_dir, '../yt8m_pca/eigenvals.npy'))[:1024, 0]) + 1e-4
         self.which_challenge=which_challenge
