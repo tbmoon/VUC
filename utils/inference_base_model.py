@@ -20,7 +20,7 @@ def main(args):
     output_dir = os.path.join(os.getcwd(), 'outputs')
     os.makedirs(output_dir, exist_ok=True)
 
-    data_loaders, _ = get_dataloader(
+    data_loaders = get_dataloader(
         input_dir=args.input_dir,
         which_challenge='3rd_challenge',
         phases=['test'],
@@ -46,11 +46,10 @@ def main(args):
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    df_input = pd.read_csv(os.path.join(args.input_dir, '3rd_challenge/test.csv'))
     df_outputs = {i: pd.DataFrame(columns=['vid_id', 'vid_label_pred', 'vid_prob']) \
                       for i in range(1, args.num_classes+1)}
 
-    for idx, (frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
+    for idx, (vid_ids, frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
         in enumerate(data_loaders['test']):           
 
         if idx%10 == 0:
@@ -77,7 +76,7 @@ def main(args):
             for j in range(args.max_vid_label_length):
                 vid_label_pred = vid_label_preds[i][j]
                 df_outputs[vid_label_pred] = df_outputs[vid_label_pred].append(
-                    {'vid_id': df_input['id'][idx+i],
+                    {'vid_id': vid_ids[i],
                      'vid_label_pred': vid_label_pred,
                      'vid_prob': vid_probs[i][j]}, ignore_index=True)
 
