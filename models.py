@@ -505,11 +505,13 @@ class BaseModel(nn.Module):
     '''
     Implement model based on the FFN.
     '''
-    def __init__(self, rgb_feature_size, audio_feature_size, num_classes):
+    def __init__(self, rgb_feature_size, audio_feature_size, d_l, num_classes):
         super(BaseModel, self).__init__()
-        self.maxpool1d = nn.MaxPool1d(kernel_size=300, stride=1, padding=0)
-        self.avgpool1d = nn.AvgPool1d(kernel_size=300, stride=1, padding=0)
-        self.linear = nn.Linear(rgb_feature_size + audio_feature_size, num_classes)
+        self.v = nn.Linear(rgb_feature_size + audio_feature_size, d_l)
+        self.u = nn.Linear(rgb_feature_size + audio_feature_size, d_l)
+        self.w = nn.Linear(d_l, 1)
+        self.o = nn.Linear(rgb_feature_size + audio_feature_size, num_classes)
+        self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, padded_frame_rgbs, padded_frame_audios):
@@ -523,13 +525,25 @@ class BaseModel(nn.Module):
         padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
         padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
 
-        # frame_features: [batch_size, frame_length, (rgb + audio) feature_size]
-        frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
-        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, feature_size, frame_length]
-        frame_features = self.avgpool1d(frame_features)  # frame_features: [batch_size, feature_size, 1]
-        frame_features = frame_features.transpose(1, 2)  # frame_features: [batch_size, 1, feature_size]        
-        frame_features = frame_features.squeeze(1)       # frame_features: [batch_size, feature_size]
+        # x: [batch_size, frame_length, (rgb + audio) feature_size]
+        x = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
 
-        vid_probs = self.linear(frame_features)
-        vid_probs = self.sigmoid(vid_probs)
-        return vid_probs
+        # v, u: [batch_size, frame_length, d_l]
+        v = self.tanh(self.v(x))
+        u = self.sigmoid(self.u(x))
+
+        # w: [batch_size, frame_length]
+        w = self.w(v * u).squeeze(2)
+
+        # scores: [batch_size, frame_length]
+        attn_weights = F.softmax(w, dim=-1)
+
+        # x: [batch_size, frame_length, feature_size]
+        x = attn_weights.unsqueeze(2) * x
+
+        # outputs: [batch_size, feature_size]
+        x = torch.sum(x, dim=1)
+
+        vid_probs = self.sigmoid(self.o(x))
+
+        return vid_probs, attn_weights

@@ -151,6 +151,7 @@ def main(args):
         model = BaseModel(
             rgb_feature_size=args.rgb_feature_size,
             audio_feature_size=args.audio_feature_size,
+            d_l=args.d_l,
             num_classes=args.num_classes)
     model = model.to(device)
 
@@ -226,10 +227,12 @@ def main(args):
                     elif args.model_name == 'gru':
                         vid_probs, attn_idc, scores, attn_weights, conv_loss = model(frame_rgbs, frame_audios, device)
                     elif args.model_name == 'base':
-                        vid_probs = model(frame_rgbs, frame_audios)
+                        vid_probs, attn_weights = model(frame_rgbs, frame_audios)
 
                     vid_label_loss = video_label_loss(vid_probs, vid_labels)
-                    seg_time_loss = segment_time_loss(attn_idc, attn_weights, seg_labels, seg_times)
+
+                    if args.which_challenge == '3rd_challenge':
+                        seg_time_loss = segment_time_loss(attn_idc, attn_weights, seg_labels, seg_times)
 
                     _, vid_preds = torch.topk(vid_probs, args.max_vid_label_length)
                     vid_preds = vid_preds + 1
@@ -321,16 +324,16 @@ if __name__ == '__main__':
                         default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
-    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
+    parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--model_name', type=str, default='transformer',
+    parser.add_argument('--model_name', type=str, default='base',
                         help='transformer, base.')
 
-    parser.add_argument('--use_conv_loss', type=bool, default=True,
+    parser.add_argument('--use_conv_loss', type=bool, default=False,
                         help='use conv loss but it has not large effect.')
 
-    parser.add_argument('--load_model', type=bool, default=True,
+    parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -360,6 +363,9 @@ if __name__ == '__main__':
     parser.add_argument('--d_audio', type=int, default=256,
                          help='mapping audio size. (256)')
 
+    parser.add_argument('--d_l', type=int, default=256,
+                        help='d_l (256)')
+
     parser.add_argument('--d_model', type=int, default=128,
                         help='d_model for feature projection. \
                               512 for paper. (256)')
@@ -388,7 +394,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=100,
+    parser.add_argument('--step_size', type=int, default=10,
                         help='period of learning rate decay. (5)')
 
     parser.add_argument('--gamma', type=float, default=0.5,
@@ -400,7 +406,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_factor', type=float, default=10.,
                         help='multiplicative factor of segment loss. (0.1)')
 
-    parser.add_argument('--num_epochs', type=int, default=200,
+    parser.add_argument('--num_epochs', type=int, default=100,
                         help='the number of epochs. (100)')
 
     parser.add_argument('--batch_size', type=int, default=128,
