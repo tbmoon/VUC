@@ -151,8 +151,11 @@ def main(args):
         model = BaseModel(
             rgb_feature_size=args.rgb_feature_size,
             audio_feature_size=args.audio_feature_size,
+            d_rgb=args.d_rgb,
+            d_audio=args.d_audio,
             d_l=args.d_l,
-            num_classes=args.num_classes)
+            num_classes=args.num_classes,
+            dropout=args.dropout)
     model = model.to(device)
 
     #center_loss = CenterLoss(num_classes=args.num_classes, feat_dim=args.d_model, device=device)
@@ -394,7 +397,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=10,
+    parser.add_argument('--step_size', type=int, default=7,
                         help='period of learning rate decay. (5)')
 
     parser.add_argument('--gamma', type=float, default=0.5,

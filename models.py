@@ -505,12 +505,18 @@ class BaseModel(nn.Module):
     '''
     Implement model based on the FFN.
     '''
-    def __init__(self, rgb_feature_size, audio_feature_size, d_l, num_classes):
+    def __init__(self, rgb_feature_size, audio_feature_size, d_rgb, d_audio, d_l, num_classes, dropout):
         super(BaseModel, self).__init__()
-        self.v = nn.Linear(rgb_feature_size + audio_feature_size, d_l)
-        self.u = nn.Linear(rgb_feature_size + audio_feature_size, d_l)
+        self.frame2seg = Frame2Segment()
+        self.rgb_dense = nn.Linear(rgb_feature_size, d_rgb)
+        self.audio_dense = nn.Linear(audio_feature_size, d_audio)
+        self.rgb_dense_bn = nn.BatchNorm1d(d_rgb)
+        self.audio_dense_bn = nn.BatchNorm1d(d_audio)
+        self.dropout = nn.Dropout(dropout)
+        self.v = nn.Linear(d_rgb + d_audio, d_l)
+        self.u = nn.Linear(d_rgb + d_audio, d_l)
         self.w = nn.Linear(d_l, 1)
-        self.o = nn.Linear(rgb_feature_size + audio_feature_size, num_classes)
+        self.o = nn.Linear(d_rgb + d_audio, num_classes)
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
@@ -521,12 +527,18 @@ class BaseModel(nn.Module):
             - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
         outputs:
             - vid_probs: [batch_size, num_classes]
+            - attn_weights: [batch_size, seg_length]
         '''
-        padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
-        padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
+        seg_rgbs = self.frame2seg(padded_frame_rgbs)      # seg_rgbs: [batch_size, seg_length=60, rgb_feature_size]
+        seg_audios = self.frame2seg(padded_frame_audios)  # seg_audios: [batch_size, seg_length=60, audio_feature_size]
 
-        # x: [batch_size, frame_length, (rgb + audio) feature_size]
-        x = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
+        seg_rgbs = self.rgb_dense(seg_rgbs).transpose(1, 2)
+        seg_rgbs = self.dropout(F.relu(self.rgb_dense_bn(seg_rgbs).transpose(1, 2)))
+        seg_audios = self.audio_dense(seg_audios).transpose(1, 2)
+        seg_audios = self.dropout(F.relu(self.audio_dense_bn(seg_audios).transpose(1, 2)))
+
+        # x: [batch_size, frame_length, (d_rgb + d_audio)]
+        x = torch.cat((seg_rgbs, seg_audios), 2)
 
         # v, u: [batch_size, frame_length, d_l]
         v = self.tanh(self.v(x))
