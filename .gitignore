@@ -5,8 +5,10 @@
 *tmp*
 .ipynb_checkpoints
 .DS_Store
+sample_submission.csv
 
 __pycache__
 tmp
 logs
 models
+outputs
