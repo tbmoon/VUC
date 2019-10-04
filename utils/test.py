@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from data_loader import YouTubeDataset, get_dataloader
 from models import BaseModel, TransformerModel, TransformerModel_V2
 
 
@@ -15,99 +16,89 @@ device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
 def main(args):
 
-    output_dir = os.path.join(os.getcwd(), 'tests_tmp')
+    since = time.time()
+    output_dir = os.path.join(os.getcwd(), 'outputs')
     os.makedirs(output_dir, exist_ok=True)
+
+    data_loaders, _ = get_dataloader(
+        input_dir=args.input_dir,
+        which_challenge='3rd_challenge',
+        phases=['test'],
+        max_frame_length=args.max_frame_length,
+        max_vid_label_length=args.max_vid_label_length,
+        max_seg_label_length=args.max_seg_label_length,
+        rgb_feature_size=args.rgb_feature_size,
+        audio_feature_size=args.audio_feature_size,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers)
 
     model = BaseModel(
         rgb_feature_size=args.rgb_feature_size,
         audio_feature_size=args.audio_feature_size,
+        d_rgb=args.d_rgb,
+        d_audio=args.d_audio,
         d_l=args.d_l,
-        num_classes=args.num_classes)
+        num_classes=args.num_classes,
+        dropout=args.dropout)
     model = model.to(device)
 
-    checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-base-finetune.ckpt'))
+    checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-base.ckpt'))
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    pca = np.sqrt(np.load(os.path.join(args.input_dir, '../../yt8m_pca/eigenvals.npy'))[:1024, 0]) + 1e-4
+    df_input = pd.read_csv(os.path.join(args.input_dir, '3rd_challenge/test.csv'))
+    df_outputs = {i: pd.DataFrame(columns=['vid_id', 'vid_label_pred', 'vid_prob']) \
+                      for i in range(1, args.num_classes+1)}
 
-    df_input = pd.read_csv(os.path.join(args.input_dir, 'test.csv'))
+    for idx, (frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
+        in enumerate(data_loaders['test']):           
 
-    for i in range(1, args.num_classes+1):
-        df_output = pd.DataFrame(columns=['vid_id', 'vid_label_pred', 'vid_prob'])
-        df_output.to_csv(os.path.join(output_dir, '%04d.csv'%i), index=False)
+        if idx%10 == 0:
+          print('idx:' idx)
 
-    for idx, vid_id in enumerate(df_input.id):
-        #if idx > 5:
-        #    break
-        if idx % 100 == 0:
-            print('idx:', idx, ' vid_id:', vid_id)
-            
-        data = torch.load(os.path.join(args.input_dir, 'test', vid_id + '.pt'))
-        vid_labels = data['video_labels']
-        seg_labels = data['segment_labels']
-        seg_times = data['segment_times']
-        frame_rgb = data['frame_rgb'][:args.max_frame_length].float()
-        frame_audio = data['frame_audio'][:args.max_frame_length].float()
-
-        # referred to 'https://github.com/linrongc/youtube-8m' for PCA.
-        offset = 4./512
-        frame_rgb = frame_rgb - offset
-        frame_rgb = frame_rgb * torch.from_numpy(pca)
-
-        frame_len = frame_rgb.size(0)
-        frame_rgbs = torch.zeros(1, args.max_frame_length, args.rgb_feature_size)
-        frame_audios = torch.zeros(1, args.max_frame_length, args.audio_feature_size)
-        frame_rgbs[0, :frame_len] = frame_rgb      # [1, max_frame_length, rgb_feature_size]
-        frame_audios[0, :frame_len] = frame_audio  # [1, max_frame_length, audio_feature_size]
+        # frame_rgbs: [batch_size, frame_length, rgb_feature_size]
+        # frame_audios: [batch_size, frame_length, audio_feature_size]
         frame_rgbs = frame_rgbs.to(device)
         frame_audios = frame_audios.to(device)
+        batch_size = frame_audios.size(0)
 
         # vid_probs: [batch_size, num_classes]
-        # attn_idc: [batch_size, num_classes]
-        # scores: [batch_size, seg_length, n_attns]
-        vid_probs, attn_weights = model(frame_rgbs, frame_audios)
+        vid_probs, _ = model(frame_rgbs, frame_audios)
 
-        # vid_probs: [num_classes]
-        vid_probs = vid_probs.squeeze(0).cpu()
-
-        # vid_probs: [max_vid_label_length]
-        # vid_label_preds: [max_vid_label_length]
+        # vid_probs: [batch_size, max_vid_label_length]
+        # vid_label_preds: [batch_size, max_vid_label_length]
         vid_probs, vid_label_preds = torch.topk(vid_probs, args.max_vid_label_length)
 
-        vid_label_preds = vid_label_preds + 1
-        vid_label_preds = vid_label_preds.numpy()
         vid_probs = vid_probs.cpu().detach().numpy()
+        vid_label_preds = vid_label_preds.cpu().numpy()
+        vid_label_preds = vid_label_preds + 1
 
-        for i in range(args.max_vid_label_length):
-            df_output = pd.read_csv(os.path.join(output_dir, '%04d.csv'%vid_label_preds[i]))
-            df_output = df_output.append({'vid_id': vid_id,
-                                          'vid_label_pred': vid_label_preds[i],
-                                          'vid_prob': vid_probs[i]}, ignore_index=True)
-            df_output.to_csv(os.path.join(output_dir, '%04d.csv'%vid_label_preds[i]), index=False)
+        for i in range(batch_size):
+            for j in range(args.max_vid_label_length):
+                vid_label_pred = vid_label_preds[i][j]
+                df_outputs[vid_label_pred] = df_outputs[vid_label_pred].append(
+                    {'vid_id': df_input['id'][idx+i],
+                     'vid_label_pred': vid_label_pred,
+                     'vid_prob': vid_probs[i][j]}, ignore_index=True)
 
+    for i in range(1, args.num_classes+1):
+        df_outputs[i].to_csv(os.path.join(output_dir, '%04d.csv'%i), index=False)
 
-        if args.print == True:
-            print("vid_id", vid_id)
-            print("vid_labels:", vid_labels.numpy())
-            print("vid_label_preds:", vid_label_preds, "\n")
-            print("vid_probs:", vid_probs, "\n")
-            print()
-        
+    time_elapsed = time.time() - since
+    print('=> Running time in a epoch: {:.0f}h {:.0f}m {:.0f}s'
+          .format(time_elapsed // 3600, (time_elapsed % 3600) // 60, time_elapsed % 60))
+
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets/3rd_challenge',
+                        default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets',
                         help='input directory for video understanding challenge.')
 
-    parser.add_argument('--print', type=bool, default=False,
-                        help='print.')
-
     parser.add_argument('--model_name', type=str, default='base',
-                        help='transformer, base.')
+                        help='base model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
@@ -121,12 +112,6 @@ if __name__ == '__main__':
     parser.add_argument('--max_seg_label_length', type=int, default=5,
                         help='the maximum length of segment label for 3rd challenge. (5)')
 
-    parser.add_argument('--n_layers', type=int, default=2,
-                        help='n_layers for the encoder. (6)')
-
-    parser.add_argument('--n_heads', type=int, default=4,
-                        help='n_heads for the attention. (8)')
-
     parser.add_argument('--rgb_feature_size', type=int, default=1024,
                         help='rgb feature size in a frame. (1024)')
 
@@ -139,22 +124,9 @@ if __name__ == '__main__':
     parser.add_argument('--d_audio', type=int, default=256,
                          help='mapping audio size. (256)')
 
-    parser.add_argument('--d_model', type=int, default=128,
-                        help='d_model for feature projection. \
-                              512 for paper. (256)')
-
     parser.add_argument('--d_l', type=int, default=256,
                         help='d_l for q, k, v projection. (64)')
     
-    parser.add_argument('--d_proj', type=int, default=1024,
-                        help='d_proj for q, k, v projection. (64)')
-
-    parser.add_argument('--d_ff', type=int, default=256,
-                        help='d_ff. 2048 for paper. (1024)')
-
-    parser.add_argument('--d_linear', type=int, default=512,
-                        help='d_linear. (2048)')
-
     parser.add_argument('--n_attns', type=int, default=4,
                         help='n_heads for the attention. (4)')
 
@@ -163,6 +135,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='dropout. (0.1)')
+
+    parser.add_argument('--batch_size', type=int, default=100,
+                        help='batch_size. (64) / (256)')
+
+    parser.add_argument('--num_workers', type=int, default=10,
+                        help='the number of processes working on cpu. (16)')
 
     args = parser.parse_args()
 
