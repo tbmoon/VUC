@@ -54,7 +54,7 @@ def main(args):
         in enumerate(data_loaders['test']):           
 
         if idx%10 == 0:
-          print('idx:' idx)
+            print('idx:', idx)
 
         # frame_rgbs: [batch_size, frame_length, rgb_feature_size]
         # frame_audios: [batch_size, frame_length, audio_feature_size]
@@ -97,14 +97,8 @@ if __name__ == '__main__':
                         default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets',
                         help='input directory for video understanding challenge.')
 
-    parser.add_argument('--model_name', type=str, default='base',
-                        help='base model.')
-
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
-
-    parser.add_argument('--max_seg_length', type=int, default=60,
-                        help='the maximum length of segment step. (60)')
 
     parser.add_argument('--max_vid_label_length', type=int, default=20,
                         help='the maximum length of video label for 3rd challenge. (4)')
@@ -125,22 +119,19 @@ if __name__ == '__main__':
                          help='mapping audio size. (256)')
 
     parser.add_argument('--d_l', type=int, default=256,
-                        help='d_l for q, k, v projection. (64)')
+                        help='d_l for attentions. (256)')
     
-    parser.add_argument('--n_attns', type=int, default=4,
-                        help='n_heads for the attention. (4)')
-
     parser.add_argument('--num_classes', type=int, default=1000,
-                        help='the number of classes. (1000) / (3862)')
+                        help='the number of classes. (1000)')
 
     parser.add_argument('--dropout', type=float, default=0.1,
                         help='dropout. (0.1)')
 
     parser.add_argument('--batch_size', type=int, default=100,
-                        help='batch_size. (64) / (256)')
+                        help='batch_size. (100)')
 
     parser.add_argument('--num_workers', type=int, default=10,
-                        help='the number of processes working on cpu. (16)')
+                        help='the number of processes working on cpu. (10)')
 
     args = parser.parse_args()
 
