@@ -109,7 +109,7 @@ def main(args):
     # the maximum length of video label in 3rd challenge: 4.
     args.max_vid_label_length = 18 if args.which_challenge == '2nd_challenge' else 4
 
-    data_loaders, dataset_sizes = get_dataloader(
+    data_loaders = get_dataloader(
         input_dir=args.input_dir,
         which_challenge=args.which_challenge,
         phases=['train', 'valid'],
@@ -192,7 +192,7 @@ def main(args):
             else:
                 model.eval()
 
-            for idx, (frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
+            for idx, (_, frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
                 in enumerate(data_loaders[phase]):
                 
                 optimizer.zero_grad()
