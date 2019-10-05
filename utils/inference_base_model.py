@@ -84,8 +84,8 @@ def main(args):
                     {'vid_id': vid_ids[i],
                      'vid_label_pred': vid_label_pred,
                      'vid_prob': vid_probs[i][j],
-                     'seg_label_pred': seg_label_preds[i],
-                     'seg_prob': seg_probs[i]}, ignore_index=True)
+                     'seg_label_pred': list(seg_label_preds[i]),
+                     'seg_prob': list(seg_probs[i])}, ignore_index=True)
 
     for i in range(1, args.num_classes+1):
         df_outputs[i].to_csv(os.path.join(output_dir, '%04d.csv'%i), index=False)
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets',
+                        default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets',
                         help='input directory for video understanding challenge.')
 
     parser.add_argument('--seg_pred_length', type=int, default=20,
