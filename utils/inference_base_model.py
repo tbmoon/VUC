@@ -42,11 +42,11 @@ def main(args):
         dropout=args.dropout)
     model = model.to(device)
 
-    checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-base.ckpt'))
+    checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-base-finetune.ckpt'))
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    df_outputs = {i: pd.DataFrame(columns=['vid_id', 'vid_label_pred', 'vid_prob']) \
+    df_outputs = {i: pd.DataFrame(columns=['vid_id', 'vid_label_pred', 'vid_prob', 'seg_label_pred', 'seg_prob']) \
                       for i in range(1, args.num_classes+1)}
 
     for idx, (vid_ids, frame_lengths, frame_rgbs, frame_audios, vid_labels, seg_labels, seg_times) \
@@ -62,15 +62,20 @@ def main(args):
         batch_size = frame_audios.size(0)
 
         # vid_probs: [batch_size, num_classes]
-        vid_probs, _ = model(frame_rgbs, frame_audios)
+        # attn_weights: [batch_size, max_seg_length]
+        vid_probs, attn_weights = model(frame_rgbs, frame_audios)
 
         # vid_probs: [batch_size, max_vid_label_length]
         # vid_label_preds: [batch_size, max_vid_label_length]
         vid_probs, vid_label_preds = torch.topk(vid_probs, args.max_vid_label_length)
+        seg_probs, seg_label_preds = torch.topk(attn_weights, args.seg_pred_length)
 
         vid_probs = vid_probs.cpu().detach().numpy()
         vid_label_preds = vid_label_preds.cpu().numpy()
         vid_label_preds = vid_label_preds + 1
+        seg_probs = seg_probs.cpu().detach().numpy()
+        seg_label_preds = seg_label_preds.cpu().numpy()
+        seg_label_preds = seg_label_preds + 1
 
         for i in range(batch_size):
             for j in range(args.max_vid_label_length):
@@ -78,7 +83,9 @@ def main(args):
                 df_outputs[vid_label_pred] = df_outputs[vid_label_pred].append(
                     {'vid_id': vid_ids[i],
                      'vid_label_pred': vid_label_pred,
-                     'vid_prob': vid_probs[i][j]}, ignore_index=True)
+                     'vid_prob': vid_probs[i][j],
+                     'seg_label_pred': seg_label_preds[i],
+                     'seg_prob': seg_probs[i]}, ignore_index=True)
 
     for i in range(1, args.num_classes+1):
         df_outputs[i].to_csv(os.path.join(output_dir, '%04d.csv'%i), index=False)
@@ -93,11 +100,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--input_dir', type=str,
-                        default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets',
+                        default='/run/media/hoosiki/WareHouse2/mtb/datasets/VU/pytorch_datasets',
                         help='input directory for video understanding challenge.')
+
+    parser.add_argument('--seg_pred_length', type=int, default=20,
+                        help='the maximum length of segment step. (60)')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
                         help='the maximum length of frame. (301)')
+
+    parser.add_argument('--max_seg_length', type=int, default=60,
+                        help='the maximum length of segment step. (60)')
 
     parser.add_argument('--max_vid_label_length', type=int, default=20,
                         help='the maximum length of video label for 3rd challenge. (4)')
