@@ -167,7 +167,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained.ckpt'))
+        checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-base.ckpt'))
         model.load_state_dict(checkpoint['state_dict'])
 
     params = list(model.parameters()) #+ list(center_loss.parameters())
@@ -392,12 +392,12 @@ if __name__ == '__main__':
                         help='dropout. (0.1)')
 
     parser.add_argument('--learning_rate', type=float, default=0.001,
-                        help='learning rate for training. (0.01)')
+                        help='learning rate for training. (0.001)')
 
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=7,
+    parser.add_argument('--step_size', type=int, default=5,
                         help='period of learning rate decay. (5)')
 
     parser.add_argument('--gamma', type=float, default=0.5,
