@@ -122,7 +122,7 @@ def main(args):
         num_workers=args.num_workers)
 
     if args.model_name == 'transformer':
-        model = TransformerModel_V2(
+        model = TransformerModel(
             n_layers=args.n_layers,
             n_heads=args.n_heads,
             rgb_feature_size=args.rgb_feature_size,
@@ -330,10 +330,10 @@ if __name__ == '__main__':
     parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
-    parser.add_argument('--model_name', type=str, default='base',
+    parser.add_argument('--model_name', type=str, default='transformer',
                         help='transformer, base.')
 
-    parser.add_argument('--use_conv_loss', type=bool, default=False,
+    parser.add_argument('--use_conv_loss', type=bool, default=True,
                         help='use conv loss but it has not large effect.')
 
     parser.add_argument('--load_model', type=bool, default=False,
@@ -397,7 +397,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=5,
+    parser.add_argument('--step_size', type=int, default=4,
                         help='period of learning rate decay. (5)')
 
     parser.add_argument('--gamma', type=float, default=0.5,
