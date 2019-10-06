@@ -54,7 +54,7 @@ def main(args):
         dropout=args.dropout)
     model = model.to(device)
 
-    checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-transformer.ckpt'))
+    checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-04.ckpt'))
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
@@ -97,10 +97,21 @@ def main(args):
         # selected_attn_weights: [batch_size, vid_pred_length, max_seg_length]
         selected_attn_weights = batched_index_select(attn_weights, 1, selected_attn_idc)
 
-		# seg_probs: [batch_size, seg_pred_length] 
-		# seg_label_preds: [batch_size, seg_pred_length] 
+        # seg_probs: [batch_size, vid_pred_length, seg_pred_length] 
+        # seg_label_preds: [batch_size, vid_pred_length, seg_pred_length] 
         seg_probs, seg_label_preds = torch.topk(selected_attn_weights, args.seg_pred_length)
         seg_label_preds = seg_label_preds + 1
+
+        # seg_prob_min, seg_prob_max: [batch_size, vid_pred_length]
+        seg_prob_min, _ = seg_probs.min(dim=2)
+        seg_prob_max, _ = seg_probs.max(dim=2)
+
+        # seg_prob_min, seg_prob_max: [batch_size, vid_pred_length, seg_pred_length]
+        seg_prob_min = seg_prob_min.unsqueeze(2).expand(batch_size, args.vid_pred_length, args.seg_pred_length)
+        seg_prob_max = seg_prob_max.unsqueeze(2).expand(batch_size, args.vid_pred_length, args.seg_pred_length)
+
+        # seg_probs: [batch_size, vid_pred_length, seg_pred_length]
+        seg_probs = (seg_probs - seg_prob_min) / (seg_prob_max - seg_prob_min + 1e-6)
 
         # To save predictions, converted to numpy data.
         vid_probs = vid_probs.cpu().detach().numpy()
@@ -109,7 +120,7 @@ def main(args):
         seg_label_preds = seg_label_preds.cpu().numpy()
 
         for i in range(batch_size):
-            for j in range(args.max_vid_label_length):
+            for j in range(args.vid_pred_length):
                 vid_label_pred = vid_label_preds[i][j]
                 df_outputs[vid_label_pred] = df_outputs[vid_label_pred].append(
                     {'vid_id': vid_ids[i],
@@ -134,7 +145,7 @@ if __name__ == '__main__':
                         default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets',
                         help='input directory for video understanding challenge.')
 
-    parser.add_argument('--vid_pred_length', type=int, default=22,
+    parser.add_argument('--vid_pred_length', type=int, default=20,
                         help='the maximum length of vid prediction. (60)')
 
     parser.add_argument('--seg_pred_length', type=int, default=20,
