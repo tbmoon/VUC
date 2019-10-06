@@ -373,9 +373,172 @@ class TransformerModel(nn.Module):
             - attn_weights: [batch_size, seg_length, n_attns]
             - conv_loss: []
         '''
-        #padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
-        #padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
+        padded_frame_rgbs = self.rgb_dense(padded_frame_rgbs).transpose(1, 2)
+        padded_frame_rgbs = self.dropout(F.relu(self.rgb_dense_bn(padded_frame_rgbs).transpose(1, 2)))
+        padded_frame_audios = self.audio_dense(padded_frame_audios).transpose(1, 2)
+        padded_frame_audios = self.dropout(F.relu(self.audio_dense_bn(padded_frame_audios).transpose(1, 2)))
 
+        # frame_features: [batch_size, frame_length, rgb_feature_size + audio_feature_size]
+        frame_features = torch.cat((padded_frame_rgbs, padded_frame_audios), 2)
+        frame_features = self.embedding(frame_features)     # frame_features: [batch_size, frame_length, d_model]
+        frame_features = self.position(frame_features)
+        frame_features = self.encoder(frame_features)
+        seg_features = self.frame2seg(frame_features)       # seg_features: [batch_size, seg_length=60, d_model]
+        vid_probs, attn_idc, scores, attn_weights, conv_loss = self.classifier(seg_features, device)
+        return vid_probs, attn_idc, scores, attn_weights, conv_loss
+
+
+def seg_attention(query, key, value, dropout=None):
+    '''
+    Compute 'Scaled Dot Product Attention'.
+    '''
+    # query, key, value: [batch_size, seg_length, d_proj]
+    # score: [batch_size, seg_length]
+    # p_attn: [batch_size, seg_length]
+    d_proj = query.size(-1)
+    score = torch.sum(query * key, dim=-1) / math.sqrt(d_proj)
+    p_attn = F.softmax(score, dim=-1)
+
+    # weighted_sum: [batch_size, seg_length, d_proj]
+    weighted_sum = p_attn.unsqueeze(2) * value
+    return weighted_sum, score, p_attn
+    
+    
+    
+class GatedSegmentAttention(nn.Module):
+    def __init__(self, d_model, d_proj, dropout=0.1):
+        '''
+        Take in number of projection size.
+        '''
+        super(GatedSegmentAttention, self).__init__()
+        self.linear_q = nn.Linear(d_model, d_proj)
+        self.linear_k = nn.Linear(d_model, d_proj)
+        self.linear_s = nn.Linear(d_proj, 1)
+        self.tanh = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, qk, value):
+        '''
+        inputs:
+            - qk: [batch_size, seg_length, d_model]
+            - value: [batch_size, seg_length, d_proj]
+        outputs:
+            - weighted_sum: [batch_size, 1, d_proj]
+            - score: [batch_size, seg_length]
+            - attn_weight: [batch_size, seg_length]
+        '''
+        # 1) Do all the linear projections in batch from d_model => d_proj => 1.
+        query = self.tanh(self.linear_q(qk))   # query: [batch_size, seg_length, d_proj]
+        key = self.sigmoid(self.linear_k(qk))  # key: [batch_size, seg_length, d_proj]
+        score = self.linear_s(query * key).squeeze(2)  # score: [batch_size, seg_length]
+
+        # attn_weight: [batch_size, seg_length]
+        attn_weight = F.softmax(score, dim=-1)
+
+        # 2) Apply attention on all the projected vectors in batch.
+        # weighted_sum: [batch_size, seg_length, d_proj]
+        weighted_sum = attn_weight.unsqueeze(2) * value
+
+        # 3) Apply element-wise summation w.r.t. seg_length.
+        # weighted_sum: [batch_size, 1, d_proj]
+        weighted_sum = torch.sum(weighted_sum, dim=1, keepdim=True)
+        return weighted_sum, score, attn_weight
+
+
+class GatedClassifier(nn.Module):
+    '''
+    Classify video labels.
+    '''
+    def __init__(self, d_model, d_proj, n_attns, num_classes, dropout=0.1):
+        super(GatedClassifier, self).__init__()
+        self.d_proj = d_proj
+        self.n_attns = n_attns
+        self.num_classes = num_classes
+        self.value = nn.Linear(d_model, d_proj)
+        self.seg_attns = clones(GatedSegmentAttention(d_model, d_proj, dropout), n_attns)
+        self.conv1d = nn.Conv1d(in_channels=1, out_channels=num_classes, kernel_size=d_proj, bias=True)
+        self.norm = LayerNorm(num_classes)
+        self.dropout = nn.Dropout(p=dropout)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, seg_features, device):
+        '''
+        Calculated by weighted sum using hadamard product.
+        inputs:
+            - seg_features: [batch_size, seg_length, d_model]
+        outputs:
+            - vid_probs: [batch_size, num_classes]
+            - attn_idc: [batch_size, num_classes]
+            - scores: [batch_size, seg_length, n_attns]
+            - attn_weights: [batch_size, seg_length, n_attns]
+            - conv_loss: []
+        '''
+        batch_size = seg_features.size(0)
+        vid_logits = torch.Tensor().to(device)
+        scores = torch.Tensor().to(device)
+        attn_weights = torch.Tensor().to(device)
+        seg_values = self.value(seg_features)                             # seg_values: [batch_size, seg_length, d_proj]
+        for seg_attn in self.seg_attns:
+            # vid_feature: [batch_size, 1, d_proj]
+            # score: [batch_size, seg_length]
+            # attn_weight: [batch_size, seg_length]
+            vid_feature, score, attn_weight = seg_attn(seg_features, seg_values)
+            vid_logit = self.conv1d(self.dropout(F.relu(vid_feature)))    # vid_logit: [batch_size, num_classes, 1]
+            vid_logit = self.norm(vid_logit.squeeze(2)).unsqueeze(2)
+            vid_logits = torch.cat((vid_logits, vid_logit), dim=2)        # vid_logits: [batch_size, num_classes, n_attns]
+            score = score.unsqueeze(2)                                    # score: [batch_size, seg_length, 1]
+            attn_weight = attn_weight.unsqueeze(2)                        # attn_weight: [batch_size, seg_length, 1]
+            scores = torch.cat((scores, score), dim=2)                    # scores: [batch_size, seg_length, n_attns]
+            attn_weights = torch.cat((attn_weights, attn_weight), dim=2)  # attn_weights: [batch_size, seg_length, n_attns]
+            
+        # Do "maxpool1d" using torch.max for max logits and indice.
+        vid_logits, attn_idc = torch.max(vid_logits, dim=2)               # vid_logits, attn_idc: [batch_size, num_classes]
+        vid_probs = self.sigmoid(vid_logits)                              # vid_probs: [batch_size, num_classes]
+
+        conv_pars = torch.ones(batch_size, 1, self.d_proj).to(device)     # conv_pars: [batch_size, 1, d_proj]
+        conv_pars = self.conv1d(conv_pars).squeeze(2)                     # conv_pars: [batch_size, num_classes]
+        conv_pars = F.softmax(conv_pars, dim=1)
+        conv_loss = conv_pars.std(1, keepdim=False)                       # conv_loss: [batch_size]
+        conv_loss = conv_loss.clamp(min=1e-9, max=1e+9).sum(dim=0)        # conv_loss: []
+        return vid_probs, attn_idc, scores, attn_weights, conv_loss    
+
+
+class GatedTransformerModel(nn.Module):
+    '''
+    Implement model based on the gated transformer.
+    '''
+    def __init__(self, n_layers, n_heads, rgb_feature_size,
+                 audio_feature_size, d_rgb, d_audio, d_model, d_ff,
+                 d_proj, n_attns, num_classes, dropout):
+        super(GatedTransformerModel, self).__init__()
+        c = copy.deepcopy
+        self.d_model = d_model
+        self.rgb_dense = nn.Linear(rgb_feature_size, d_rgb)
+        self.audio_dense = nn.Linear(audio_feature_size, d_audio)
+        self.rgb_dense_bn = nn.BatchNorm1d(d_rgb)
+        self.audio_dense_bn = nn.BatchNorm1d(d_audio)
+        self.dropout = nn.Dropout(dropout)
+        self.embedding = Embedding(d_rgb, d_audio, d_model)
+        self.position = PositionalEncoding(d_model, dropout)
+        self.attn = MultiHeadedAttention(n_heads, d_model)
+        self.pff = PositionwiseFeedForward(d_model, d_ff, dropout)
+        self.encoder_layer = EncoderLayer(d_model, c(self.attn), c(self.pff), dropout)
+        self.encoder = Encoder(self.encoder_layer, n_layers)
+        self.frame2seg = Frame2Segment()
+        self.classifier = GatedClassifier(d_model, d_proj, n_attns, num_classes, dropout)
+
+    def forward(self, padded_frame_rgbs, padded_frame_audios, device):
+        '''
+        inputs:
+            - padded_frame_rgbs: [batch_size, frame_length, rgb_feature_size]
+            - padded_frame_audios: [batch_size, frame_length, audio_feature_size]
+        outputs:
+            - vid_probs: [batch_size, num_classes]
+            - attn_idc: [batch_size, num_classes]
+            - attn_weights: [batch_size, seg_length, n_attns]
+            - conv_loss: []
+        '''
         padded_frame_rgbs = self.rgb_dense(padded_frame_rgbs).transpose(1, 2)
         padded_frame_rgbs = self.dropout(F.relu(self.rgb_dense_bn(padded_frame_rgbs).transpose(1, 2)))
         padded_frame_audios = self.audio_dense(padded_frame_audios).transpose(1, 2)
@@ -426,9 +589,6 @@ class TransformerModel_V2(nn.Module):
             - attn_weights: [batch_size, seg_length, n_attns]
             - conv_loss: []
         '''
-        #padded_frame_rgbs = F.normalize(padded_frame_rgbs, p=2, dim=2)
-        #padded_frame_audios = F.normalize(padded_frame_audios, p=2, dim=2)
-
         padded_frame_rgbs = self.frame2seg(padded_frame_rgbs)       # seg_features: [batch_size, seg_length=60, d_model]
         padded_frame_audios = self.frame2seg(padded_frame_audios)   # seg_features: [batch_size, seg_length=60, d_model]
 

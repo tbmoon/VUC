@@ -11,7 +11,7 @@ from torch.optim import lr_scheduler
 from data_loader import YouTubeDataset, get_dataloader
 from models import BaseModel
 from models import GRUModel
-from models import TransformerModel, TransformerModel_V2
+from models import TransformerModel, GatedTransformerModel, TransformerModel_V2
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -141,7 +141,7 @@ def main(args):
         num_workers=args.num_workers)
 
     if args.model_name == 'transformer':
-        model = TransformerModel(
+        model = GatedTransformerModel(
             n_layers=args.n_layers,
             n_heads=args.n_heads,
             rgb_feature_size=args.rgb_feature_size,
@@ -346,7 +346,7 @@ if __name__ == '__main__':
                         default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
-    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
+    parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
     parser.add_argument('--model_name', type=str, default='transformer',
@@ -355,7 +355,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_conv_loss', type=bool, default=False,
                         help='use conv loss but it has not large effect.')
 
-    parser.add_argument('--load_model', type=bool, default=True,
+    parser.add_argument('--load_model', type=bool, default=False,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -416,7 +416,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=20,
+    parser.add_argument('--step_size', type=int, default=4,
                         help='period of learning rate decay. (5)')
 
     parser.add_argument('--gamma', type=float, default=0.5,
