@@ -67,6 +67,7 @@ def segment_time_loss(attn_idc, attn_weights, seg_labels, seg_times):
     eps = 1e-6
     batch_size = attn_weights.size(0)
     max_seg_length = attn_weights.size(1)
+    n_attns = attn_weights.size(2)
     max_seg_label_length = seg_labels.size(1)
     
     zeros = torch.zeros(batch_size, 1).long().to(device)
@@ -74,28 +75,46 @@ def segment_time_loss(attn_idc, attn_weights, seg_labels, seg_times):
 
     # selected_attn_idc: [batch_size, max_seg_label_length]
     selected_attn_idc = torch.gather(attn_idc, 1, seg_labels)
-    mask = seg_labels.float().ge(0.5)
 
-    # attn_weights: [batch_size, n_attns, seg_length]
+    # attn_weights: [batch_size, max_seg_length, n_attns]
+    # attn_min, attn_max: [batch_size, n_attns]
+    attn_min, _ = attn_weights.min(dim=1)
+    attn_max, _ = attn_weights.max(dim=1)
+
+    # attn_min, attn_max: [batch_size, max_seg_length, n_attns]
+    attn_min = attn_min.unsqueeze(1).expand(batch_size, max_seg_length, n_attns)
+    attn_max = attn_max.unsqueeze(1).expand(batch_size, max_seg_length, n_attns)
+
+    # attn_weights: [batch_size, max_seg_length, n_attns]
+    attn_weights = (attn_weights - attn_min) / (attn_max - attn_min + eps)
+
+    # attn_weights: [batch_size, n_attns, max_seg_length]
     attn_weights = attn_weights.transpose(1, 2)
-    
+
     # selected_attn_weights: [batch_size, max_seg_label_length, max_seg_length]
     selected_attn_weights = batched_index_select(attn_weights, 1, selected_attn_idc)
-    
+
     # selected_attn_weights: [batch_size, max_seg_label_length, max_seg_length+1]
     zeros = torch.zeros(batch_size, max_seg_label_length, 1).to(device)
     selected_attn_weights = torch.cat((zeros, selected_attn_weights), dim=2)
 
     # seg_times: [batch_size, max_seg_label_length, 1]
     seg_times = seg_times.unsqueeze(2)
-    
-    # selected_attn_weights: [batch_size, max_seg_label_length, 1]
-    selected_attn_weights = torch.gather(selected_attn_weights, 2, seg_times)
 
-    # selected_attn_weights: [batch_size, max_seg_label_length]
-    selected_attn_weights = selected_attn_weights.squeeze(2)
-    
-    loss = -1 * torch.log(selected_attn_weights + eps).masked_select(mask)
+    # all_seg_times: [max_seg_length+1]
+    all_seg_times = torch.arange(max_seg_length+1).to(device)
+
+    # all_seg_times: [batch_size, max_seg_label_length, max_seg_length+1]
+    all_seg_times = all_seg_times.expand(batch_size, max_seg_label_length, max_seg_length+1)
+
+    # probs: [batch_size, max_seg_label_length, max_seg_length+1]
+    probs = torch.where(all_seg_times == seg_times, selected_attn_weights, 1-selected_attn_weights)
+
+    # probs: [batch_size, max_seg_label_length, max_seg_length]
+    probs = probs[:, :, 1:]
+    probs = probs.clamp(min=eps, max=1-eps)
+
+    loss = -1 * torch.log(probs)
     loss = loss.sum()
     return loss
 
@@ -167,7 +186,7 @@ def main(args):
             nn.init.xavier_uniform_(p)
 
     if args.load_model == True:
-        checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-base.ckpt'))
+        checkpoint = torch.load(os.path.join(os.getcwd(), 'models/model-epoch-pretrained-transformer.ckpt'))
         model.load_state_dict(checkpoint['state_dict'])
 
     params = list(model.parameters()) #+ list(center_loss.parameters())
@@ -211,7 +230,7 @@ def main(args):
                 seg_times = seg_times.to(device)
                 batch_size = vid_labels.size(0)
                 vid_label_size = args.num_classes * batch_size
-                seg_time_size = seg_labels.float().ge(0.5).sum()
+                seg_time_size = batch_size * args.max_seg_label_length * args.max_seg_length
                 vid_label_lengths = vid_labels.float().ge(0.5).sum(dim=1).view(-1, 1)
                 num_vid_labels = vid_labels.float().ge(0.5).sum()
 
@@ -272,7 +291,7 @@ def main(args):
                     running_conv_size += batch_size
                 if args.which_challenge == '3rd_challenge':
                     running_seg_time_loss += seg_time_loss.item()
-                    running_seg_time_size += seg_time_size.item()
+                    running_seg_time_size += seg_time_size
 
             epoch_vid_label_loss = running_vid_label_loss / running_vid_label_size
             epoch_conv_loss = 0.0
@@ -327,16 +346,16 @@ if __name__ == '__main__':
                         default='/run/media/hoosiki/WareHouse1/mtb/datasets/VU/pytorch_datasets/',
                         help='input directory for video understanding challenge.')
 
-    parser.add_argument('--which_challenge', type=str, default='2nd_challenge',
+    parser.add_argument('--which_challenge', type=str, default='3rd_challenge',
                         help='(2nd_challenge) / (3rd_challenge).')
 
     parser.add_argument('--model_name', type=str, default='transformer',
                         help='transformer, base.')
 
-    parser.add_argument('--use_conv_loss', type=bool, default=True,
+    parser.add_argument('--use_conv_loss', type=bool, default=False,
                         help='use conv loss but it has not large effect.')
 
-    parser.add_argument('--load_model', type=bool, default=False,
+    parser.add_argument('--load_model', type=bool, default=True,
                         help='load_model.')
 
     parser.add_argument('--max_frame_length', type=int, default=300,
@@ -397,7 +416,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping. (0.25)')
 
-    parser.add_argument('--step_size', type=int, default=4,
+    parser.add_argument('--step_size', type=int, default=20,
                         help='period of learning rate decay. (5)')
 
     parser.add_argument('--gamma', type=float, default=0.5,
