@@ -126,8 +126,8 @@ def main(args):
                     {'vid_id': vid_ids[i],
                      'vid_label_pred': vid_label_pred,
                      'vid_prob': vid_probs[i][j],
-                     'seg_label_pred': list(seg_label_preds[i]),
-                     'seg_prob': list(seg_probs[i])}, ignore_index=True)
+                     'seg_label_pred': list(seg_label_preds[i][j]),
+                     'seg_prob': list(seg_probs[i][j])}, ignore_index=True)
 
     for i in range(1, args.num_classes+1):
         df_outputs[i].to_csv(os.path.join(output_dir, '%04d.csv'%i), index=False)
